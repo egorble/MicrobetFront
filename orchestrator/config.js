@@ -5,14 +5,14 @@
 module.exports = {
   // Ендпоінти Linera applications
   endpoints: {
-    BTC: 'http://localhost:8082/chains/fe4098e82d023ff809cfaf46e26884b19d7b28b085bc97bd62de899542474a0c/applications/7e95a16fa13a747779457045f1c6812dc8cfa300868060ee6d58e2d2dc2ddc8b',
-    ETH: 'http://localhost:8083/chains/c1f0f66fbd4d5580eddb0467dfff3d987c8bb7cdbb69f2b7b90dce9074d7d63b/applications/ed810c47fea3fa99b7a6bca60c82ed7c78d5b1d7c1b96b3436d25b11c5808ee0'
+    BTC: 'http://localhost:8082/chains/fe4098e82d023ff809cfaf46e26884b19d7b28b085bc97bd62de899542474a0c/applications/b6bdc6a4308cb89178dad2be75a7b6da86147e2e34000cc78827f1b43b6a08ab',
+    ETH: 'http://localhost:8083/chains/c1f0f66fbd4d5580eddb0467dfff3d987c8bb7cdbb69f2b7b90dce9074d7d63b/applications/328ca28c55326b55f6506841af115d6ae24a87f1e72da0c9736e8b227c30be95'
   },
 
   // Налаштування часу
   timing: {
     // Інтервал між циклами (мілісекунди)
-    intervalMs: 0.5 * 60 * 1000, // 5 хвилин
+    intervalMs: 5 * 60 * 1000, // 5 хвилин
     
     // Затримка між мутаціями resolveRound та closeRound (мілісекунди)
     mutationDelayMs: 400, // 400мс

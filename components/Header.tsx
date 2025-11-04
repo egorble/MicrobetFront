@@ -1,14 +1,29 @@
-import { TrendingUp, Wallet, RefreshCw, Clock } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getUserTimezone, formatLocalTime } from "../utils/timeUtils";
 
 export function Header() {
-  const { balance, loading, accountOwner, refreshBalance, subscriptionStatus, notifications } = useLinera();
+  const { 
+    balance, 
+    loading, 
+    accountOwner, 
+    refreshBalance,
+    application
+  } = useLinera();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [timezone, setTimezone] = useState(getUserTimezone());
+  
+  // Dropdown state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [chainBalance, setChainBalance] = useState<string>("0");
+  const [mintAmount, setMintAmount] = useState<string>("");
+  const [isMinting, setIsMinting] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [showMintInput, setShowMintInput] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Оновлюємо поточний час кожну секунду
   useEffect(() => {
@@ -19,10 +34,109 @@ export function Header() {
     return () => clearInterval(timer);
   }, []);
 
+  // Закриваємо dropdown при кліку поза ним
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+        setShowMintInput(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Запитуємо chainBalance при відкритті dropdown
+  useEffect(() => {
+    if (isDropdownOpen) {
+      queryChainBalance();
+    }
+  }, [isDropdownOpen, application, accountOwner]);
+
   // Отримуємо інформацію про часовий пояс при завантаженні
   useEffect(() => {
     setTimezone(getUserTimezone());
   }, []);
+
+  // Функція для запиту chainBalance
+  const queryChainBalance = async () => {
+    if (!application || !accountOwner) return;
+    
+    try {
+      const query = `
+        query {
+          accounts {
+            entry(key: "${accountOwner}") {
+              value
+            }
+            chainBalance
+          }
+        }
+      `;
+      
+      const result = await application.query(JSON.stringify({ query }));
+      const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      const chainBal = parsedResult?.data?.accounts?.chainBalance || "0";
+      setChainBalance(chainBal);
+    } catch (error) {
+      console.error('Chain balance query error:', error);
+      setChainBalance("0");
+    }
+  };
+
+  // Функція для mint
+  const handleMint = async () => {
+    if (!application || !accountOwner || !mintAmount) return;
+    
+    setIsMinting(true);
+    try {
+      const mutation = `
+        mutation {
+          mint(
+            owner: "${accountOwner}",
+            amount: "${mintAmount}"
+          )
+        }
+      `;
+      
+      await application.query(JSON.stringify({ query: mutation }));
+      if (refreshBalance) {
+        await refreshBalance();
+      }
+      await queryChainBalance();
+      setMintAmount("");
+      setShowMintInput(false);
+    } catch (error) {
+      console.error('Mint error:', error);
+    } finally {
+      setIsMinting(false);
+    }
+  };
+
+  // Функція для withdraw
+  const handleWithdraw = async () => {
+    if (!application) return;
+    
+    setIsWithdrawing(true);
+    try {
+      const mutation = `
+        mutation {
+          withdraw
+        }
+      `;
+      
+      await application.query(JSON.stringify({ query: mutation }));
+      if (refreshBalance) {
+        await refreshBalance();
+      }
+      await queryChainBalance();
+    } catch (error) {
+      console.error('Withdraw error:', error);
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
 
   // Форматування балансу для відображення
   const formatBalance = (balance?: string) => {
@@ -85,33 +199,112 @@ export function Header() {
               </div>
             </div>
 
-            {/* Subscription Status */}
-            {subscriptionStatus && (
-              <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                📡 {subscriptionStatus}
-              </div>
-            )}
+            {/* WebSocket Status - REMOVED */}
             
-            <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
-              <Wallet className="w-5 h-5 text-red-600" />
-              <div>
-                <div className="text-red-600">
-                  {loading ? "Loading..." : `${formatBalance(balance)} LNRA`}
-                </div>
-                <div className="text-xs text-red-500">
-                  {accountOwner ? `${accountOwner.slice(0, 6)}...${accountOwner.slice(-4)}` : "WALLET"}
-                </div>
-              </div>
-              {/* Кнопка оновлення балансу */}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleRefreshBalance}
-                disabled={isRefreshing || loading}
-                className="ml-2 p-1 h-6 w-6 hover:bg-red-100"
+            {/* Subscription Status - REMOVED */}
+            
+            {/* Wallet Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <div 
+                className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               >
-                <RefreshCw className={`w-3 h-3 text-red-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </Button>
+                <Wallet className="w-5 h-5 text-red-600" />
+                <div>
+                  <div className="text-red-600">
+                    {loading ? "Loading..." : `${formatBalance(balance)} LNRA`}
+                  </div>
+                  <div className="text-xs text-red-500">
+                    {accountOwner ? `${accountOwner.slice(0, 6)}...${accountOwner.slice(-4)}` : "WALLET"}
+                  </div>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-red-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <div className="p-4">
+                    {/* Balances */}
+                    <div className="space-y-3 mb-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Owner Balance:</span>
+                        <span className="font-medium text-gray-900">{formatBalance(balance)} LNRA</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Chain Balance:</span>
+                        <span className="font-medium text-gray-900">{formatBalance(chainBalance)} LNRA</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4 space-y-3">
+                      {/* Mint Section */}
+                      <div>
+                        {!showMintInput ? (
+                          <Button
+                            onClick={() => setShowMintInput(true)}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white"
+                            disabled={isMinting}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Mint Tokens
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="number"
+                              value={mintAmount}
+                              onChange={(e) => setMintAmount(e.target.value)}
+                              placeholder="Enter amount to mint"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleMint}
+                                disabled={isMinting || !mintAmount}
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                              >
+                                {isMinting ? "Minting..." : "Confirm"}
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  setShowMintInput(false);
+                                  setMintAmount("");
+                                }}
+                                variant="outline"
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Withdraw Button */}
+                      <Button
+                        onClick={handleWithdraw}
+                        disabled={isWithdrawing}
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        <Minus className="w-4 h-4 mr-2" />
+                        {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+                      </Button>
+
+                      {/* Refresh Balance Button */}
+                      <Button
+                        onClick={handleRefreshBalance}
+                        disabled={isRefreshing || loading}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        {isRefreshing ? "Refreshing..." : "Refresh Balance"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <Button variant="outline" size="icon" className="rounded-full">

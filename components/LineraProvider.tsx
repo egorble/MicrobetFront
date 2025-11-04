@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import * as linera from '../@linera/client';
 import { PrivateKey } from '../@linera/signer';
+import { WebSocketClient } from '../utils/WebSocketClient';
 
 // Types for rounds data
 interface Round {
@@ -44,6 +45,11 @@ interface LineraContextType {
   ethRounds?: Round[];
   setActiveTab?: (tab: 'btc' | 'eth') => void;
   refreshRounds?: () => Promise<void>;
+  // WebSocket statuses
+  btcWebSocketStatus?: string;
+  ethWebSocketStatus?: string;
+  btcNotifications?: string[];
+  ethNotifications?: string[];
 }
 
 const LineraContext = createContext<LineraContextType>({ 
@@ -61,10 +67,17 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     notifications: [],
     activeTab: 'btc',
     btcRounds: [],
-    ethRounds: []
+    ethRounds: [],
+    btcWebSocketStatus: '🔴 Disconnected',
+    ethWebSocketStatus: '🔴 Disconnected',
+    btcNotifications: [],
+    ethNotifications: []
   });
   const initRef = useRef(false);
   const subscriptionRef = useRef<any>(null); // Для зберігання subscription
+  const btcWebSocketRef = useRef<WebSocketClient | null>(null);
+  const ethWebSocketRef = useRef<WebSocketClient | null>(null);
+  const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
 
   // Функція для запиту балансу
   const queryBalance = async (application: linera.Application, owner: string): Promise<string> => {
@@ -193,6 +206,136 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }));
     } catch (error) {
       // Мовчки обробляємо помилку
+    }
+  };
+
+  // Функція для налаштування BTC WebSocket підключення
+  const setupBtcWebSocket = () => {
+    try {
+      // Перевіряємо чи вже існує активне з'єднання
+      if (btcWebSocketRef.current && btcWebSocketRef.current.isConnectedStatus()) {
+        console.log('BTC WebSocket already connected, skipping setup');
+        return;
+      }
+
+      const btcChainId = import.meta.env.VITE_BTC_CHAIN_ID;
+      const btcWebSocketUrl = import.meta.env.VITE_BTC_WEBSOCKET_URL || 'ws://localhost:8082/ws';
+      
+      if (!btcChainId) {
+        console.error('BTC Chain ID not found in environment variables');
+        setState(prev => ({
+          ...prev,
+          btcWebSocketStatus: '❌ Missing Chain ID'
+        }));
+        return;
+      }
+
+      console.log('Setting up BTC WebSocket:', { btcChainId, btcWebSocketUrl });
+      
+      btcWebSocketRef.current = new WebSocketClient({
+        url: btcWebSocketUrl,
+        chainId: btcChainId,
+        heartbeatInterval: 30000, // 30 секунд
+        onNotification: (notification) => {
+          console.log('BTC notification received:', notification);
+          setState(prev => ({
+            ...prev,
+            btcNotifications: [
+              notification,
+              ...(prev.btcNotifications || []).slice(0, 4) // Зберігаємо останні 5 повідомлень
+            ]
+          }));
+          // Оновлюємо дані після отримання повідомлення
+          refreshRounds();
+        },
+        onError: (error) => {
+          console.error('BTC WebSocket error:', error);
+          setState(prev => ({
+            ...prev,
+            btcWebSocketStatus: '❌ Error'
+          }));
+        },
+        onStatusChange: (status) => {
+          console.log('BTC WebSocket status changed:', status);
+          setState(prev => ({
+            ...prev,
+            btcWebSocketStatus: status
+          }));
+        }
+      });
+
+      btcWebSocketRef.current.connect();
+    } catch (error) {
+      console.error('Failed to setup BTC WebSocket:', error);
+      setState(prev => ({
+        ...prev,
+        btcWebSocketStatus: '❌ Setup Failed'
+      }));
+    }
+  };
+
+  // Функція для налаштування ETH WebSocket підключення
+  const setupEthWebSocket = () => {
+    try {
+      // Перевіряємо чи вже існує активне з'єднання
+      if (ethWebSocketRef.current && ethWebSocketRef.current.isConnectedStatus()) {
+        console.log('ETH WebSocket already connected, skipping setup');
+        return;
+      }
+
+      const ethChainId = import.meta.env.VITE_ETH_CHAIN_ID;
+      const ethWebSocketUrl = import.meta.env.VITE_ETH_WEBSOCKET_URL || 'ws://localhost:8083/ws';
+      
+      if (!ethChainId) {
+        console.error('ETH Chain ID not found in environment variables');
+        setState(prev => ({
+          ...prev,
+          ethWebSocketStatus: '❌ Missing Chain ID'
+        }));
+        return;
+      }
+
+      console.log('Setting up ETH WebSocket:', { ethChainId, ethWebSocketUrl });
+      
+      ethWebSocketRef.current = new WebSocketClient({
+        url: ethWebSocketUrl,
+        chainId: ethChainId,
+        heartbeatInterval: 30000, // 30 секунд
+        onNotification: (notification) => {
+          console.log('ETH notification received:', notification);
+          setState(prev => ({
+            ...prev,
+            ethNotifications: [
+              notification,
+              ...(prev.ethNotifications || []).slice(0, 4) // Зберігаємо останні 5 повідомлень
+            ]
+          }));
+          // Оновлюємо дані після отримання повідомлення
+          refreshRounds();
+        },
+        onError: (error) => {
+          console.error('ETH WebSocket error:', error);
+          setState(prev => ({
+            ...prev,
+            ethWebSocketStatus: '❌ Error'
+          }));
+        },
+        onStatusChange: (status) => {
+          console.log('ETH WebSocket status changed:', status);
+          setState(prev => ({
+            ...prev,
+            ethWebSocketStatus: status
+          }));
+        }
+      });
+
+      ethWebSocketRef.current.connect();
+    } catch (error) {
+      console.error('Failed to setup ETH WebSocket:', error);
+      setState(prev => ({
+        ...prev,
+        ethWebSocketStatus: '❌ Setup Failed'
+      }));
     }
   };
 
@@ -437,6 +580,47 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     };
   }, [state.client, state.accountOwner, state.loading]); // Dependencies: client, accountOwner and loading
+
+  // useEffect для налаштування WebSocket підключень
+  useEffect(() => {
+    // Перевіряємо чи система готова і чи ще не налаштовано WebSocket
+    if (state.loading || state.status !== 'Ready') {
+      return; // Чекаємо поки система буде готова
+    }
+
+    // Перевіряємо чи вже налаштовано WebSocket
+    if (webSocketSetupRef.current) {
+      return; // Вже налаштовано, не робимо нічого
+    }
+
+    console.log('Setting up WebSocket connections...');
+    webSocketSetupRef.current = true;
+    
+    // Налаштовуємо BTC WebSocket
+    setupBtcWebSocket();
+    
+    // Налаштовуємо ETH WebSocket
+    setupEthWebSocket();
+
+  }, [state.status, state.loading]); // Залежності: status та loading
+
+  // Окремий useEffect для cleanup при unmount компонента
+  useEffect(() => {
+    return () => {
+      console.log('Component unmounting - cleaning up WebSocket connections...');
+      webSocketSetupRef.current = false;
+      
+      if (btcWebSocketRef.current) {
+        btcWebSocketRef.current.disconnect();
+        btcWebSocketRef.current = null;
+      }
+      
+      if (ethWebSocketRef.current) {
+        ethWebSocketRef.current.disconnect();
+        ethWebSocketRef.current = null;
+      }
+    };
+  }, []); // Порожній масив залежностей - запускається тільки при unmount
 
   // Періодичне оновлення rounds кожну секунду
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { LightningAnimation } from "./LightningAnimation";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { formatLocalTime } from "../utils/timeUtils";
 
 type GameStatus = "LIVE" | "Next" | "Later" | "EXPIRED";
@@ -36,6 +36,7 @@ export function GameCard({ game, currentPrice, onPredictionClick }: GameCardProp
   };
   
   const handleButtonClick = (direction: 'up' | 'down') => {
+    console.log(`Button clicked: ${direction}, lightning active: ${lightningActive}`);
     setLightningActive(true);
     // Викликаємо функцію для відкриття модального вікна
     if (onPredictionClick) {
@@ -44,9 +45,10 @@ export function GameCard({ game, currentPrice, onPredictionClick }: GameCardProp
     console.log(`Clicked ${direction} for game ${game.id}`);
   };
 
-  const handleLightningComplete = () => {
+  const handleLightningComplete = useCallback(() => {
+    console.log('Lightning animation completed, setting active to false');
     setLightningActive(false);
-  };
+  }, []);
 
   const isLive = game.status === "LIVE";
   const isNext = game.status === "Next";

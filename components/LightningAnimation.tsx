@@ -8,16 +8,30 @@ interface LightningAnimationProps {
 
 export function LightningAnimation({ isActive, onComplete }: LightningAnimationProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onCompleteRef = useRef(onComplete);
   const sceneRef = useRef<{
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
     camera?: THREE.PerspectiveCamera;
     animationId?: number;
     cleanup?: () => void;
+    isAnimating?: boolean;
   }>({});
+
+  // Update the ref when onComplete changes
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!canvasRef.current || !isActive) return;
+
+    // Prevent multiple animations from running simultaneously
+    if (sceneRef.current.animationId || sceneRef.current.isAnimating) {
+      return;
+    }
+
+    sceneRef.current.isAnimating = true;
 
     const canvas = canvasRef.current;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -135,8 +149,10 @@ export function LightningAnimation({ isActive, onComplete }: LightningAnimationP
         sceneRef.current.animationId = requestAnimationFrame(animate);
       } else {
         // Animation complete
+        console.log('Lightning animation finished, calling onComplete');
+        sceneRef.current.isAnimating = false;
         setTimeout(() => {
-          onComplete?.();
+          onCompleteRef.current?.();
         }, 100);
       }
     }
@@ -147,6 +163,9 @@ export function LightningAnimation({ isActive, onComplete }: LightningAnimationP
       if (sceneRef.current.animationId) {
         cancelAnimationFrame(sceneRef.current.animationId);
       }
+      
+      // Reset animation state
+      sceneRef.current.isAnimating = false;
       
       // Clean up all resources
       bolts.forEach(bolt => {
@@ -163,7 +182,7 @@ export function LightningAnimation({ isActive, onComplete }: LightningAnimationP
     sceneRef.current.cleanup = cleanup;
 
     return cleanup;
-  }, [isActive, onComplete]);
+  }, [isActive]); // Removed onComplete from dependencies
 
   if (!isActive) return null;
 

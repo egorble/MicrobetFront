@@ -3,7 +3,6 @@ import { GameCard } from "./components/GameCard";
 import { ChartTabs } from "./components/ChartTabs";
 import { LineraProvider, useLinera } from "./components/LineraProvider";
 import { PredictionModal } from "./components/PredictionModal";
-import { NotificationPanel } from "./components/NotificationPanel";
 import { useEffect, useState } from "react";
 import { TrendingUp, Clock } from "lucide-react";
 import axios from 'axios';
@@ -318,8 +317,7 @@ function AppContent() {
           gameType={selectedGameType}
         />
 
-        {/* Notification Panel */}
-        <NotificationPanel />
+        {/* Notification Panel - REMOVED */}
       </div>
   );
 }
