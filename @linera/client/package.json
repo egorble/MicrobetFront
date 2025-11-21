@@ -28,7 +28,7 @@
     "typedoc-plugin-markdown": "^4.7.0"
   },
   "scripts": {
-    "install": "true",
+    "install": "node -e \"\"",
     "build": "bash build.bash --release",
     "lint": "pnpm build && pnpm exec tsc && cargo fmt --check && cargo clippy",
     "ci": "pnpm lint && pnpm doc",

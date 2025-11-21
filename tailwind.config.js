@@ -9,22 +9,10 @@ export default {
   ],
   theme: {
     extend: {
-      screens: {
-        'xs': '475px',
-        'mobile': {'max': '767px'},
-        'tablet': {'min': '768px', 'max': '1023px'},
-        'desktop': {'min': '1024px'},
-      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)"
-      },
-      spacing: {
-        'safe-top': 'env(safe-area-inset-top)',
-        'safe-bottom': 'env(safe-area-inset-bottom)',
-        'safe-left': 'env(safe-area-inset-left)',
-        'safe-right': 'env(safe-area-inset-right)',
       },
       colors: {
         background: "hsl(var(--background))",

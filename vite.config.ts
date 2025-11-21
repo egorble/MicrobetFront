@@ -14,12 +14,21 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: 'index.html',
-        linera: './@linera/client',
+        linera: '@linera/client',
       },
       preserveEntrySignatures: 'strict',
     },
   },
   server: {
+    host: '127.0.0.1',
+    port: 5175,
+    strictPort: true,
+    allowedHosts: ['microbet-linera.xyz'],
+    hmr: {
+      protocol: 'wss',
+      host: 'microbet-linera.xyz',
+      clientPort: 443,
+    },
     fs: {
       allow: ['..']
     },
@@ -29,7 +38,7 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: ['./@linera/client', './@linera/signer']
+    exclude: ['@linera/client', '@linera/signer']
   },
   define: {
     global: 'globalThis',
