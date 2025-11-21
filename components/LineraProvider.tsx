@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import * as linera from '@linera/client';
-import { PrivateKey } from '@linera/signer';
+import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
 import { supabase } from '../utils/supabaseClient';
 
@@ -35,7 +35,7 @@ interface LineraContextType {
   accountOwner?: string;
   balance?: string;
   loading: boolean;
-  status: 'Loading' | 'Creating Wallet' | 'Creating Client' | 'Creating Chain' | 'Ready';
+  status: 'Not Connected' | 'Connecting' | 'Loading' | 'Creating Wallet' | 'Creating Client' | 'Creating Chain' | 'Ready';
   error?: Error;
   refreshBalance?: () => Promise<void>;
   subscriptionStatus?: string;
@@ -51,19 +51,20 @@ interface LineraContextType {
   ethWebSocketStatus?: string;
   btcNotifications?: string[];
   ethNotifications?: string[];
+  connectWallet?: () => Promise<void>;
 }
 
 const LineraContext = createContext<LineraContextType>({ 
-  loading: true, 
-  status: 'Loading' 
+  loading: false, 
+  status: 'Not Connected' 
 });
 
 export const useLinera = () => useContext(LineraContext);
 
 export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<LineraContextType>({ 
-    loading: true, 
-    status: 'Loading',
+    loading: false, 
+    status: 'Not Connected',
     subscriptionStatus: '',
     notifications: [],
     activeTab: 'btc',
@@ -74,7 +75,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     btcNotifications: [],
     ethNotifications: []
   });
-  const initRef = useRef(false);
+  
   const subscriptionRef = useRef<any>(null); // Для зберігання subscription
   const btcWebSocketRef = useRef<WebSocketClient | null>(null);
   const ethWebSocketRef = useRef<WebSocketClient | null>(null);
@@ -211,119 +212,61 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setState(prev => ({ ...prev, activeTab: tab }));
   };
 
-  useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
-    
-    async function initLinera() {
+  const connectWallet = async () => {
+    try {
+      setState(prev => ({ ...prev, status: 'Connecting', loading: true }));
       try {
-        // 1. Ініціалізація WASM з кращою обробкою помилок
-        console.log('Linera init: loading WASM');
-        setState(prev => ({ ...prev, status: 'Loading' }));
-        
+        await linera.default();
+      } catch (wasmError) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await linera.default();
+      }
+      const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net';
+      const btcApplicationId = import.meta.env.VITE_BTC_APPLICATION_ID || 'btc_app_id_here';
+      const ethApplicationId = import.meta.env.VITE_ETH_APPLICATION_ID || 'eth_app_id_here';
+      let signer: any = new MetaMask();
+      const faucet = new linera.Faucet(faucetUrl);
+      const owner = await Promise.resolve(signer.address());
+      setState(prev => ({ ...prev, status: 'Creating Wallet' }));
+      const wallet = await faucet.createWallet();
+      const chainId = await faucet.claimChain(wallet, owner);
+      setState(prev => ({ ...prev, status: 'Creating Client' }));
+      const clientInstance = await new linera.Client(wallet, signer, false);
+      const btcApplication = await clientInstance.frontend().application(btcApplicationId);
+      const ethApplication = await clientInstance.frontend().application(ethApplicationId);
+      const initialBalance = await queryBalance(btcApplication, owner);
+      if (parseFloat(initialBalance) === 0) {
         try {
-          await linera.default();
-        } catch (wasmError) {
-          console.warn('WASM loading warning:', wasmError);
-          // Спробуємо ще раз через невелику затримку
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          await linera.default();
-        }
-
-        // 2. Отримання конфігурації
-        const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net';
-        const btcApplicationId = import.meta.env.VITE_BTC_APPLICATION_ID || 'btc_app_id_here';
-        const ethApplicationId = import.meta.env.VITE_ETH_APPLICATION_ID || 'eth_app_id_here';
-
-        // 3. Створення або отримання мнемоніки
-        let mnemonic = localStorage.getItem('linera_mnemonic');
-        if (!mnemonic) {
-          const { ethers } = await import('ethers');
-          mnemonic = ethers.Wallet.createRandom().mnemonic!.phrase;
-          localStorage.setItem('linera_mnemonic', mnemonic);
-        }
-
-        // 4. Створення signer та faucet
-        const signer = PrivateKey.fromMnemonic(mnemonic);
-        const faucet = new linera.Faucet(faucetUrl);
-        const owner = signer.address();
-
-        // 5. Створення wallet та chain
-        setState(prev => ({ ...prev, status: 'Creating Wallet' }));
-        const wallet = await faucet.createWallet();
-        const chainId = await faucet.claimChain(wallet, owner);
-
-        // 6. Створення client та applications
-        setState(prev => ({ ...prev, status: 'Creating Client' }));
-        const clientInstance = await new linera.Client(wallet, signer, false);
-        const btcApplication = await clientInstance.frontend().application(btcApplicationId);
-        const ethApplication = await clientInstance.frontend().application(ethApplicationId);
-
-        // 7. Запит початкового балансу перед mint (використовуємо BTC application для балансу)
-        console.log('Querying initial balance...');
-        const initialBalance = await queryBalance(btcApplication, owner);
-        console.log('Initial balance:', initialBalance);
-
-        // 8. Виконання mint мутації тільки якщо баланс = 0
-        if (parseFloat(initialBalance) === 0) {
-          console.log('Balance is 0, executing mint mutation...');
-          try {
-            const mutation = `
-              mutation {
-                mint(
-                  owner: "${owner}",
-                  amount: "5"
-                )
-              }
-            `;
-            
-            const mintResult = await btcApplication.query(JSON.stringify({ query: mutation }));
-            console.log('Mint mutation result:', mintResult);
-            
-            // Запитуємо баланс знову після mint
-            const balanceAfterMint = await queryBalance(btcApplication, owner);
-            console.log('Balance after mint:', balanceAfterMint);
-            
-            // 9. Оновлення стану з новим балансом
-            setState(prev => ({
-              ...prev,
-              client: clientInstance,
-              wallet,
-              chainId,
-              application: btcApplication, // Deprecated - для зворотної сумісності
-              btcApplication,
-              ethApplication,
-              accountOwner: owner,
-              balance: balanceAfterMint,
-              loading: false,
-              status: 'Ready',
-            }));
-          } catch (mintError) {
-            console.warn('Mint mutation failed:', mintError);
-            // Продовжуємо з початковим балансом навіть якщо mint не вдався
-            setState(prev => ({
-              ...prev,
-              client: clientInstance,
-              wallet,
-              chainId,
-              application: btcApplication, // Deprecated - для зворотної сумісності
-              btcApplication,
-              ethApplication,
-              accountOwner: owner,
-              balance: initialBalance,
-              loading: false,
-              status: 'Ready',
-            }));
-          }
-        } else {
-          console.log('Balance is not 0, skipping mint mutation');
-          // 9. Оновлення стану з існуючим балансом
+          const mutation = `
+            mutation {
+              mint(
+                owner: "${owner}",
+                amount: "5"
+              )
+            }
+          `;
+          await btcApplication.query(JSON.stringify({ query: mutation }));
+          const balanceAfterMint = await queryBalance(btcApplication, owner);
           setState(prev => ({
             ...prev,
             client: clientInstance,
             wallet,
             chainId,
-            application: btcApplication, // Deprecated - для зворотної сумісності
+            application: btcApplication,
+            btcApplication,
+            ethApplication,
+            accountOwner: owner,
+            balance: balanceAfterMint,
+            loading: false,
+            status: 'Ready',
+          }));
+        } catch {
+          setState(prev => ({
+            ...prev,
+            client: clientInstance,
+            wallet,
+            chainId,
+            application: btcApplication,
             btcApplication,
             ethApplication,
             accountOwner: owner,
@@ -332,19 +275,30 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             status: 'Ready',
           }));
         }
-
-      } catch (err) {
-        console.error('Linera init error', err);
+      } else {
         setState(prev => ({
           ...prev,
+          client: clientInstance,
+          wallet,
+          chainId,
+          application: btcApplication,
+          btcApplication,
+          ethApplication,
+          accountOwner: owner,
+          balance: initialBalance,
           loading: false,
-          error: err as Error,
+          status: 'Ready',
         }));
       }
+    } catch (err) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        status: 'Not Connected',
+        error: err as Error,
+      }));
     }
-    
-    initLinera();
-  }, []);
+  };
 
   // Окремий useEffect для налаштування subscription
   useEffect(() => {
@@ -494,6 +448,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     ...state, 
     refreshBalance,
     refreshRounds,
-    setActiveTab
+    setActiveTab,
+    connectWallet
   }}>{children}</LineraContext.Provider>;
 };

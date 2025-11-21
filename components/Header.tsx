@@ -5,17 +5,21 @@ import { useState, useEffect, useRef } from "react";
 import { getUserTimezone, formatLocalTime } from "../utils/timeUtils";
 
 export function Header() {
-  const { 
-    balance, 
-    loading, 
-    accountOwner, 
+  const {
+    balance,
+    loading,
+    accountOwner,
     refreshBalance,
-    application
+    application,
+    status,
+    connectWallet
   } = useLinera();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const connected = !!accountOwner && status === 'Ready';
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [timezone, setTimezone] = useState(getUserTimezone());
-  
+
   // Dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [chainBalance, setChainBalance] = useState<string>("0");
@@ -62,7 +66,7 @@ export function Header() {
   // Функція для запиту chainBalance
   const queryChainBalance = async () => {
     if (!application || !accountOwner) return;
-    
+
     try {
       const query = `
         query {
@@ -74,7 +78,7 @@ export function Header() {
           }
         }
       `;
-      
+
       const result = await application.query(JSON.stringify({ query }));
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       const chainBal = parsedResult?.data?.accounts?.chainBalance || "0";
@@ -88,7 +92,7 @@ export function Header() {
   // Функція для mint
   const handleMint = async () => {
     if (!application || !accountOwner || !mintAmount) return;
-    
+
     setIsMinting(true);
     try {
       const mutation = `
@@ -99,7 +103,7 @@ export function Header() {
           )
         }
       `;
-      
+
       await application.query(JSON.stringify({ query: mutation }));
       if (refreshBalance) {
         await refreshBalance();
@@ -117,7 +121,7 @@ export function Header() {
   // Функція для withdraw
   const handleWithdraw = async () => {
     if (!application) return;
-    
+
     setIsWithdrawing(true);
     try {
       const mutation = `
@@ -125,7 +129,7 @@ export function Header() {
           withdraw
         }
       `;
-      
+
       await application.query(JSON.stringify({ query: mutation }));
       if (refreshBalance) {
         await refreshBalance();
@@ -150,12 +154,12 @@ export function Header() {
     console.log('handleRefreshBalance called');
     console.log('refreshBalance function:', refreshBalance);
     console.log('isRefreshing:', isRefreshing);
-    
+
     if (!refreshBalance || isRefreshing) {
       console.log('Refresh blocked - no function or already refreshing');
       return;
     }
-    
+
     setIsRefreshing(true);
     try {
       console.log('Calling refreshBalance...');
@@ -196,12 +200,32 @@ export function Header() {
             </div>
 
             {/* WebSocket Status - REMOVED */}
-            
+
             {/* Subscription Status - REMOVED */}
-            
+
+            {/* Connect Wallet Button (shown when not connected) */}
+            {!connected && (
+              <Button
+                onClick={async () => {
+                  if (!connectWallet || isConnecting) return;
+                  setIsConnecting(true);
+                  try {
+                    await connectWallet();
+                  } finally {
+                    setIsConnecting(false);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={isConnecting || loading}
+              >
+                {isConnecting || loading ? 'Connecting...' : 'Connect Wallet'}
+              </Button>
+            )}
+
             {/* Wallet Dropdown */}
+            {connected && (
             <div className="relative" ref={dropdownRef}>
-              <div 
+              <div
                 className="flex items-center gap-1 sm:gap-2 bg-red-50 px-2 sm:px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors touch-target"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               >
@@ -307,7 +331,8 @@ export function Header() {
                 </div>
               )}
             </div>
-            
+            )}
+
             {/* Action buttons - Hidden on mobile */}
             <div className="hidden sm:flex items-center gap-2">
               <Button variant="outline" size="icon" className="rounded-full">
@@ -316,7 +341,7 @@ export function Header() {
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
               </Button>
-              
+
               <Button variant="outline" size="icon" className="rounded-full">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" />

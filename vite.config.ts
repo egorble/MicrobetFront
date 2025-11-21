@@ -23,11 +23,11 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5175,
     strictPort: true,
-    allowedHosts: ['microbet-linera.xyz'],
+    allowedHosts: ['localhost', '127.0.0.1'],
     hmr: {
-      protocol: 'wss',
-      host: 'microbet-linera.xyz',
-      clientPort: 443,
+      protocol: 'ws',
+      host: 'localhost',
+      clientPort: 5175,
     },
     fs: {
       allow: ['..']
