@@ -224,113 +224,113 @@ export function Header() {
 
             {/* Wallet Dropdown */}
             {connected && (
-            <div className="relative" ref={dropdownRef}>
-              <div
-                className="flex items-center gap-1 sm:gap-2 bg-red-50 px-2 sm:px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors touch-target"
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              >
-                <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-                <div className="hidden sm:block">
-                  <div className="text-red-600 text-sm">
-                    {loading ? "Loading..." : `${formatBalance(balance)} LNRA`}
-                  </div>
-                  <div className="text-xs text-red-500">
-                    {accountOwner ? `${accountOwner.slice(0, 6)}...${accountOwner.slice(-4)}` : "WALLET"}
-                  </div>
-                </div>
-                <div className="sm:hidden">
-                  <div className="text-red-600 text-xs font-medium">
-                    {loading ? "..." : formatBalance(balance)}
-                  </div>
-                </div>
-                <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-red-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-              </div>
-
-              {/* Dropdown Menu */}
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-w-[calc(100vw-2rem)]">
-                  <div className="p-4">
-                    {/* Balances */}
-                    <div className="space-y-3 mb-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Owner Balance:</span>
-                        <span className="font-medium text-gray-900">{formatBalance(balance)} LNRA</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Chain Balance:</span>
-                        <span className="font-medium text-gray-900">{formatBalance(chainBalance)} LNRA</span>
-                      </div>
+              <div className="relative" ref={dropdownRef}>
+                <div
+                  className="flex items-center gap-1 sm:gap-2 bg-red-50 px-2 sm:px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors touch-target"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                >
+                  <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+                  <div className="hidden sm:block">
+                    <div className="text-red-600 text-sm">
+                      {loading ? "Loading..." : `${formatBalance(balance)} LNRA`}
                     </div>
+                    <div className="text-xs text-red-500">
+                      {accountOwner ? `${accountOwner.slice(0, 6)}...${accountOwner.slice(-4)}` : "WALLET"}
+                    </div>
+                  </div>
+                  <div className="sm:hidden">
+                    <div className="text-red-600 text-xs font-medium">
+                      {loading ? "..." : formatBalance(balance)}
+                    </div>
+                  </div>
+                  <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-red-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
 
-                    <div className="border-t border-gray-200 pt-4 space-y-3">
-                      {/* Mint Section */}
-                      <div>
-                        {!showMintInput ? (
-                          <Button
-                            onClick={() => setShowMintInput(true)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white"
-                            disabled={isMinting}
-                          >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Mint Tokens
-                          </Button>
-                        ) : (
-                          <div className="space-y-2">
-                            <input
-                              type="number"
-                              value={mintAmount}
-                              onChange={(e) => setMintAmount(e.target.value)}
-                              placeholder="Enter amount to mint"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={handleMint}
-                                disabled={isMinting || !mintAmount}
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                              >
-                                {isMinting ? "Minting..." : "Confirm"}
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  setShowMintInput(false);
-                                  setMintAmount("");
-                                }}
-                                variant="outline"
-                                className="flex-1"
-                              >
-                                Cancel
-                              </Button>
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-w-[calc(100vw-2rem)]">
+                    <div className="p-4">
+                      {/* Balances */}
+                      <div className="space-y-3 mb-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Owner Balance:</span>
+                          <span className="font-medium text-gray-900">{formatBalance(balance)} LNRA</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Chain Balance:</span>
+                          <span className="font-medium text-gray-900">{formatBalance(chainBalance)} LNRA</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-4 space-y-3">
+                        {/* Mint Section */}
+                        <div>
+                          {!showMintInput ? (
+                            <Button
+                              onClick={() => setShowMintInput(true)}
+                              className="w-full bg-green-600 hover:bg-green-700 text-white"
+                              disabled={isMinting}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Mint Tokens
+                            </Button>
+                          ) : (
+                            <div className="space-y-2">
+                              <input
+                                type="number"
+                                value={mintAmount}
+                                onChange={(e) => setMintAmount(e.target.value)}
+                                placeholder="Enter amount to mint"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={handleMint}
+                                  disabled={isMinting || !mintAmount}
+                                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                  {isMinting ? "Minting..." : "Confirm"}
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    setShowMintInput(false);
+                                    setMintAmount("");
+                                  }}
+                                  variant="outline"
+                                  className="flex-1"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
+
+                        {/* Withdraw Button */}
+                        <Button
+                          onClick={handleWithdraw}
+                          disabled={isWithdrawing}
+                          className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                        >
+                          <Minus className="w-4 h-4 mr-2" />
+                          {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+                        </Button>
+
+                        {/* Refresh Balance Button */}
+                        <Button
+                          onClick={handleRefreshBalance}
+                          disabled={isRefreshing || loading}
+                          variant="outline"
+                          className="w-full"
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                          {isRefreshing ? "Refreshing..." : "Refresh Balance"}
+                        </Button>
                       </div>
-
-                      {/* Withdraw Button */}
-                      <Button
-                        onClick={handleWithdraw}
-                        disabled={isWithdrawing}
-                        className="w-full bg-orange-600 hover:bg-orange-700 text-white"
-                      >
-                        <Minus className="w-4 h-4 mr-2" />
-                        {isWithdrawing ? "Withdrawing..." : "Withdraw"}
-                      </Button>
-
-                      {/* Refresh Balance Button */}
-                      <Button
-                        onClick={handleRefreshBalance}
-                        disabled={isRefreshing || loading}
-                        variant="outline"
-                        className="w-full"
-                      >
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        {isRefreshing ? "Refreshing..." : "Refresh Balance"}
-                      </Button>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
             )}
 
             {/* Action buttons - Hidden on mobile */}

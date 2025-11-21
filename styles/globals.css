@@ -67,6 +67,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -106,7 +107,7 @@ body {
   .overflow-x-auto::-webkit-scrollbar {
     display: none;
   }
-  
+
   .overflow-x-auto {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -135,8 +136,10 @@ body {
     min-height: 44px;
     min-width: 44px;
   }
-  
-  button, .button, [role="button"] {
+
+  button,
+  .button,
+  [role="button"] {
     min-height: 44px;
     padding: 12px 16px;
   }
@@ -144,10 +147,18 @@ body {
 
 /* Mobile typography */
 @media (max-width: 768px) {
-  h1 { font-size: 1.5rem; }
-  h2 { font-size: 1.25rem; }
-  h3 { font-size: 1.125rem; }
-  
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  h3 {
+    font-size: 1.125rem;
+  }
+
   .text-responsive {
     font-size: clamp(0.875rem, 2.5vw, 1rem);
   }
@@ -163,6 +174,7 @@ body {
 
 /* Prevent zoom on input focus (iOS) */
 @media (max-width: 768px) {
+
   input[type="text"],
   input[type="number"],
   input[type="email"],
@@ -197,6 +209,7 @@ body {
 
 /* Improved focus states for mobile */
 @media (max-width: 768px) {
+
   button:focus,
   [role="button"]:focus,
   input:focus,
@@ -205,4 +218,32 @@ body {
     outline: 2px solid #3b82f6;
     outline-offset: 2px;
   }
+}
+
+/* 3D Flip Animation Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
 }

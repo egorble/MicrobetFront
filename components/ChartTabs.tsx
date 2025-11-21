@@ -19,9 +19,9 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
         'ETH': 'ETHUSDT',
         'LNRA': 'BTCUSDT' // Fallback для LNRA, оскільки його немає на Binance
       };
-      
+
       const symbol = symbolMap[token] || 'BTCUSDT';
-      
+
       // Отримуємо дані свічок за останні 100 хвилин
       const response = await axios.get(`https://api.binance.com/api/v3/klines`, {
         params: {
@@ -30,7 +30,7 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
           limit: 100
         }
       });
-      
+
       // Конвертуємо дані Binance в формат для lightweight-charts
       const chartData = response.data.map((kline: any[]) => ({
         time: Math.floor(kline[0] / 1000) as any, // Конвертуємо мілісекунди в секунди
@@ -39,7 +39,7 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
         low: parseFloat(kline[3]),
         close: parseFloat(kline[4])
       }));
-      
+
       return chartData;
     } catch (error) {
       console.error('Помилка при отриманні даних з Binance:', error);
@@ -59,17 +59,17 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
     };
     const basePrice = basePrices[token as keyof typeof basePrices] || 67000;
     let currentPrice = basePrice;
-    
+
     for (let i = 0; i < 100; i++) {
       const time = Math.floor(Date.now() / 1000) - (100 - i) * 60; // Хвилинні дані
       const change = (Math.random() - 0.5) * (basePrice * 0.02); // 2% випадкова зміна
       currentPrice += change;
-      
+
       const open = currentPrice;
       const high = open + Math.random() * (basePrice * 0.01);
       const low = open - Math.random() * (basePrice * 0.01);
       const close = low + Math.random() * (high - low);
-      
+
       data.push({
         time: time as any,
         open: Math.max(0, open),
@@ -77,10 +77,10 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
         low: Math.max(0, low),
         close: Math.max(0, close),
       });
-      
+
       currentPrice = close;
     }
-    
+
     return data;
   };
 
@@ -207,7 +207,7 @@ export function ChartTabs({ selectedToken }: { selectedToken: string }) {
             <h3 className="text-base sm:text-lg font-semibold text-gray-800">{selectedToken}/USD Chart</h3>
             <p className="text-xs sm:text-sm text-gray-600 mt-1">Real-time {selectedToken} price chart from Binance (1-minute intervals)</p>
           </div>
-          <div 
+          <div
             ref={chartContainerRef}
             className="w-full h-64 sm:h-96 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200"
           />

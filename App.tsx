@@ -2,7 +2,6 @@ import { Header } from "./components/Header";
 import { GameCard } from "./components/GameCard";
 import { ChartTabs } from "./components/ChartTabs";
 import { LineraProvider, useLinera } from "./components/LineraProvider";
-import { PredictionModal } from "./components/PredictionModal";
 import { MobileInstallPrompt } from "./components/MobileInstallPrompt";
 import { MobileOrientationHandler } from "./components/MobileOrientationHandler";
 import { MobileSplashScreen } from "./components/MobileSplashScreen";
@@ -11,7 +10,6 @@ import { useEffect, useState } from "react";
 import { TrendingUp, Clock } from "lucide-react";
 import axios from 'axios';
 import { parseTimestamp, formatLocalTime } from "./utils/timeUtils";
-import { hapticFeedback } from "./utils/mobileUtils";
 import { registerServiceWorker, showInstallPrompt, handleAppInstalled } from "./utils/pwaUtils";
 
 // Функція для маппінгу статусів
@@ -32,9 +30,6 @@ function AppContent() {
     ETH: "3,456.78",
     LNRA: "0.0234"
   });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedPrediction, setSelectedPrediction] = useState<'UP' | 'DOWN'>('UP');
-  const [selectedGameType, setSelectedGameType] = useState<'BTC' | 'ETH'>('BTC');
   const [timeLeft, setTimeLeft] = useState<string>('00:00');
   const [showSplash, setShowSplash] = useState(mobile.isMobile);
   const [appReady, setAppReady] = useState(false);
@@ -79,19 +74,6 @@ function AppContent() {
 
   const selectedToken = activeTab === 'btc' ? 'BTC' : 'ETH';
 
-  // Функція для відкриття модального вікна
-  const handlePredictionClick = (prediction: 'UP' | 'DOWN') => {
-    // Додаємо тактильний відгук на мобільних
-    if (mobile.isMobile) {
-      hapticFeedback('light');
-    }
-    setSelectedPrediction(prediction);
-    setSelectedGameType(selectedToken as 'BTC' | 'ETH');
-    setModalOpen(true);
-  };
-
-
-
   // Функція для отримання реальних цін з Binance
   const fetchTokenPrices = async () => {
     try {
@@ -128,7 +110,7 @@ function AppContent() {
       showInstallPrompt();
       handleAppInstalled();
     }
-    
+
     // Симулюємо завантаження додатку
     const initTimer = setTimeout(() => {
       setAppReady(true);
@@ -273,11 +255,11 @@ function AppContent() {
   return (
     <>
       {/* Mobile Splash Screen */}
-      <MobileSplashScreen 
-        isVisible={showSplash && !appReady} 
-        onComplete={handleSplashComplete} 
+      <MobileSplashScreen
+        isVisible={showSplash && !appReady}
+        onComplete={handleSplashComplete}
       />
-      
+
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <Header />
 
@@ -289,11 +271,10 @@ function AppContent() {
               <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0 -mx-1 px-1">
                 <button
                   onClick={() => setActiveTab?.('btc')}
-                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${
-                    activeTab === 'btc'
-                      ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
+                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'btc'
+                    ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
                 >
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                   <div className="text-left">
@@ -303,11 +284,10 @@ function AppContent() {
                 </button>
                 <button
                   onClick={() => setActiveTab?.('eth')}
-                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${
-                    activeTab === 'eth'
-                      ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
+                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'eth'
+                    ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
                 >
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                   <div className="text-left">
@@ -344,24 +324,14 @@ function AppContent() {
                   <GameCard
                     game={game}
                     currentPrice={tokenPrices[selectedToken] || undefined}
-                    onPredictionClick={handlePredictionClick}
+                    gameType={selectedToken as 'BTC' | 'ETH'}
                   />
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Charts Section */}
           <ChartTabs selectedToken={selectedToken} />
         </main>
-
-        {/* Prediction Modal */}
-        <PredictionModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          prediction={selectedPrediction}
-          gameType={selectedGameType}
-        />
 
         {/* Mobile Install Prompt */}
         <MobileInstallPrompt />
