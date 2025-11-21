@@ -157,9 +157,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .from('rounds')
         .select('*')
         .eq('chain', chain)
-        .order('id', { ascending: true });
+        .order('id', { ascending: false })
+        .limit(500);
       if (error) throw error;
-      const rounds = (data || []).map((row: any) => ({
+      const roundsDesc = (data || []).map((row: any) => ({
         id: row.id,
         status: row.status,
         resolutionPrice: row.resolution_price != null ? String(row.resolution_price) : null,
@@ -174,6 +175,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         upBetsPool: String(row.up_bets_pool),
         downBetsPool: String(row.down_bets_pool),
       })) as Round[];
+      const rounds = roundsDesc.slice().sort((a, b) => a.id - b.id);
       
       // Додаємо розраховані payout коефіцієнти
       return rounds.map((round: Round) => {
@@ -203,11 +205,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  // Функція для налаштування BTC WebSocket підключення
-  const setupBtcWebSocket = () => {};
-
-  // Функція для налаштування ETH WebSocket підключення
-  const setupEthWebSocket = () => {};
 
   // Функція для зміни активної вкладки
   const setActiveTab = (tab: 'btc' | 'eth') => {
