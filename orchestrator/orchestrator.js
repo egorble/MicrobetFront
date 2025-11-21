@@ -1,0 +1,199 @@
+const axios = require('axios');
+const config = require('./config');
+
+// Отримуємо конфігурацію
+const BTC_ENDPOINT = config.endpoints.BTC;
+const ETH_ENDPOINT = config.endpoints.ETH;
+const INTERVAL_MS = config.development.fastMode ? config.development.fastModeIntervalMs : config.timing.intervalMs;
+const MUTATION_DELAY_MS = config.timing.mutationDelayMs;
+
+/**
+ * Отримує поточну ціну з Binance API
+ * @param {string} symbol - Символ криптовалюти (BTCUSDT, ETHUSDT)
+ * @returns {Promise<number>} - Поточна ціна
+ */
+async function getCurrentPrice(symbol) {
+  // Якщо увімкнений режим тестових цін
+  if (config.development.useTestPrices) {
+    const currency = symbol === 'BTCUSDT' ? 'BTC' : 'ETH';
+    return config.development.testPrices[currency];
+  }
+
+  try {
+    const response = await axios.get(`${config.binance.baseUrl}/ticker/price?symbol=${symbol}`, {
+      timeout: config.timing.httpTimeoutMs
+    });
+    return parseFloat(response.data.price);
+  } catch (error) {
+    if (config.logging.verbose) {
+      console.error(`Помилка при отриманні ціни для ${symbol}:`, error.message);
+    }
+    // Повертаємо fallback ціни з конфігурації
+    const currency = symbol === 'BTCUSDT' ? 'BTC' : 'ETH';
+    return config.binance.fallbackPrices[currency];
+  }
+}
+
+/**
+ * Виконує GraphQL мутацію
+ * @param {string} endpoint - URL ендпоінту
+ * @param {string} mutation - GraphQL мутація
+ * @returns {Promise<Object>} - Результат мутації
+ */
+async function executeMutation(endpoint, mutation) {
+  try {
+    const response = await axios.post(endpoint, {
+      query: mutation
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      timeout: config.timing.httpTimeoutMs
+    });
+
+    if (!response.data) {
+      throw new Error('Порожня відповідь від сервера');
+    }
+
+    if (response.data.errors) {
+      throw new Error(`GraphQL помилки: ${JSON.stringify(response.data.errors)}`);
+    }
+
+    return response.data;
+  } catch (error) {
+    if (config.logging.verbose) {
+      console.error(`Помилка виконання мутації на ${endpoint}:`, error.message);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Виконує цикл мутацій для одного ендпоінту
+ * @param {string} endpoint - URL ендпоінту
+ * @param {string} currency - Назва валюти (BTC або ETH)
+ * @param {string} symbol - Символ для Binance API
+ */
+async function processCurrency(endpoint, currency, symbol) {
+  try {
+    const emoji = config.logging.useEmojis;
+    console.log(`${emoji ? '\n🔄' : '\n[PROCESS]'} Обробка ${currency}...`);
+    
+    // Отримуємо поточну ціну
+    const currentPrice = await getCurrentPrice(symbol);
+    console.log(`${emoji ? '💰' : '[PRICE]'} Поточна ціна ${currency}: $${currentPrice.toFixed(2)}`);
+
+    // 1. Виконуємо resolveRound мутацію
+    const resolveMutation = `
+      mutation {
+        resolveRound(resolutionPrice: "${currentPrice}")
+      }
+    `;
+    
+    console.log(`${emoji ? '📊' : '[RESOLVE]'} Виконуємо resolveRound для ${currency} з ціною ${currentPrice}...`);
+    const resolveResult = await executeMutation(endpoint, resolveMutation);
+    console.log(`${emoji ? '✅' : '[SUCCESS]'} resolveRound для ${currency} виконано:`, resolveResult.data?.resolveRound || 'OK');
+
+    // Затримка між мутаціями
+    await new Promise(resolve => setTimeout(resolve, MUTATION_DELAY_MS));
+
+    // 2. Виконуємо closeRound мутацію
+    const closeMutation = `
+      mutation {
+        closeRound(closingPrice: "${currentPrice}")
+      }
+    `;
+    
+    console.log(`${emoji ? '🔒' : '[CLOSE]'} Виконуємо closeRound для ${currency} з ціною ${currentPrice}...`);
+    const closeResult = await executeMutation(endpoint, closeMutation);
+    console.log(`${emoji ? '✅' : '[SUCCESS]'} closeRound для ${currency} виконано:`, closeResult.data?.closeRound || 'OK');
+
+  } catch (error) {
+    const emoji = config.logging.useEmojis;
+    console.error(`${emoji ? '❌' : '[ERROR]'} Помилка при обробці ${currency}:`, error.message);
+  }
+}
+
+/**
+ * Основний цикл оркестратора
+ */
+async function orchestratorCycle() {
+  const timestamp = new Date().toLocaleString('uk-UA');
+  const emoji = config.logging.useEmojis;
+  
+  console.log(`${emoji ? '\n🚀' : '\n[START]'} Запуск циклу оркестратора: ${timestamp}`);
+  console.log('=' .repeat(60));
+
+  try {
+    // Обробляємо BTC та ETH паралельно
+    await Promise.all([
+      processCurrency(BTC_ENDPOINT, 'BTC', config.binance.symbols.BTC),
+      processCurrency(ETH_ENDPOINT, 'ETH', config.binance.symbols.ETH)
+    ]);
+
+    console.log(`${emoji ? '\n✨' : '\n[COMPLETE]'} Цикл завершено успішно: ${new Date().toLocaleString('uk-UA')}`);
+  } catch (error) {
+    console.error(`${emoji ? '❌' : '[CRITICAL_ERROR]'} Критична помилка в циклі оркестратора:`, error.message);
+  }
+
+  console.log('=' .repeat(60));
+  console.log(`${emoji ? '⏰' : '[NEXT]'} Наступний цикл через ${INTERVAL_MS / 1000 / 60} хвилин...`);
+}
+
+/**
+ * Запуск оркестратора
+ */
+async function startOrchestrator() {
+  const emoji = config.logging.useEmojis;
+  
+  console.log(`${emoji ? '🎯' : '[INIT]'} Запуск Linera Prediction Game Orchestrator`);
+  console.log(`${emoji ? '📡' : '[CONFIG]'} BTC Endpoint: ${BTC_ENDPOINT}`);
+  console.log(`${emoji ? '📡' : '[CONFIG]'} ETH Endpoint: ${ETH_ENDPOINT}`);
+  console.log(`${emoji ? '⏱️' : '[CONFIG]'} Інтервал: ${INTERVAL_MS / 1000 / 60} хвилин`);
+  console.log(`${emoji ? '⚡' : '[CONFIG]'} Затримка між мутаціями: ${MUTATION_DELAY_MS}мс`);
+  
+  if (config.development.fastMode) {
+    console.log(`${emoji ? '🚀' : '[DEV]'} УВАГА: Увімкнений швидкий режим розробки!`);
+  }
+  
+  if (config.development.useTestPrices) {
+    console.log(`${emoji ? '🧪' : '[TEST]'} УВАГА: Використовуються тестові ціни!`);
+  }
+  
+  console.log(`${emoji ? '🔄' : '[STATUS]'} Оркестратор працює в нескінченному циклі...\n`);
+
+  // Виконуємо перший цикл одразу
+  await orchestratorCycle();
+
+  // Встановлюємо інтервал для наступних циклів
+  setInterval(orchestratorCycle, INTERVAL_MS);
+}
+
+// Обробка сигналів завершення
+process.on('SIGINT', () => {
+  const emoji = config.logging.useEmojis;
+  console.log(`${emoji ? '\n🛑' : '\n[STOP]'} Отримано сигнал SIGINT. Зупинка оркестратора...`);
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  const emoji = config.logging.useEmojis;
+  console.log(`${emoji ? '\n🛑' : '\n[STOP]'} Отримано сигнал SIGTERM. Зупинка оркестратора...`);
+  process.exit(0);
+});
+
+// Запуск оркестратора
+if (require.main === module) {
+  startOrchestrator().catch(error => {
+    console.error('💥 Критична помилка при запуску оркестратора:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  startOrchestrator,
+  getCurrentPrice,
+  executeMutation,
+  processCurrency
+};
