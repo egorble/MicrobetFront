@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dynamic-labs/ethereum": "^4.47.0",
+    "@dynamic-labs/ethers-v6": "^4.47.0",
+    "@dynamic-labs/sdk-react-core": "^4.47.0",
+    "@dynamic-labs/wallet-book": "^4.47.0",
     "@linera/client": "^0.15.6",
     "@linera/signer": "^0.15.6",
     "@radix-ui/react-accordion": "^1.2.1",
@@ -62,7 +66,8 @@
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.180.0",
-    "vaul": "^1.0.0"
+    "vaul": "^1.0.0",
+    "viem": "^2.39.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

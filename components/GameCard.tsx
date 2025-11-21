@@ -301,7 +301,7 @@ export function GameCard({ game, currentPrice, gameType, onPredictionClick }: Ga
             </button>
             <button
               onClick={() => setPrediction(prediction === 'UP' ? 'DOWN' : 'UP')}
-              className={`font-bold transition-all hover:scale-105 active:scale-95 focus:outline-none ${prediction === 'UP' ? 'text-green-700' : 'text-red-700'}`}
+              className={`font-bold transition-all hover:scale-105 active:scale-95 ${prediction === 'UP' ? 'text-green-700' : 'text-red-700'}`}
             >
               {prediction === 'UP' ? 'Enter UP' : 'Enter DOWN'}
             </button>
