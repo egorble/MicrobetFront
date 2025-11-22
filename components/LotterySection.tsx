@@ -60,47 +60,8 @@ export function LotterySection() {
                 winnersByRound.set(Number(w.round_id), list);
             });
 
-            setDbRoundsCache(dbRounds || [])
-            const mapped: LotteryRound[] = (dbRounds || []).map((r: any) => {
-                // Log keys to find end_time
-                if (r.id === '5' || r.id === 5) {
-                    console.log('[Lottery Sync] Round 5 Data:', JSON.stringify(r));
-                }
-
-                const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
-
-                // Try to find a valid end time from DB, otherwise fallback to 5 mins
-                // Checking common names: end_time, closed_at, scheduled_at
-                const dbEndTime = r.end_time || r.closed_at || r.scheduled_end_time;
-                const endMs = dbEndTime ? (toMs(dbEndTime) ?? (createdMs + 5 * 60 * 1000)) : (createdMs + 5 * 60 * 1000);
-
-                const winners = winnersByRound.get(Number(r.id)) || [];
-                let statusUpper = String(r.status).toUpperCase() as LotteryStatus;
-
-                // REMOVED: Client-side status override. Trust the DB status.
-                // if (statusUpper === 'ACTIVE' && endMs <= Date.now()) {
-                //    statusUpper = 'CLOSED';
-                // }
-
-                // const revealed = statusUpper === 'COMPLETE' ? winners : [];
-                return {
-                    id: String(r.id),
-                    status: statusUpper,
-                    prizePool: String(r.prize_pool),
-                    ticketPrice: String(r.ticket_price),
-                    endTime: endMs,
-                    ticketsSold: Number(r.total_tickets_sold || 0),
-                    winners,
-                };
-            });
-
-            // Log latest round from DB for debugging
-            if (mapped.length > 0) {
-                const latest = mapped[0];
-                console.log(`[Lottery Sync] Latest DB Round: ID=${latest.id}, Status=${latest.status}, EndTime=${formatLocalTime(latest.endTime)} (Local)`);
-            }
-
-            setRounds(mapped);
+            setDbRoundsCache(dbRounds || []);
+            // REMOVED: setRounds(mapped); -> Prevents flicker. State update is now handled solely by the effect below.
 
             const latest20: Winner[] = (latestWinners || []).slice(0, 20).map((w: any, idx: number) => ({
                 ticketId: String(w.ticket_number),
@@ -126,49 +87,15 @@ export function LotterySection() {
         };
     }, []);
 
-    // Reveal winners one by one every 10 seconds while drawing
-    // Reveal logic moved to LotteryHero
-    // useEffect(() => { ... }, [rounds.length]);
-
+    // Sync rounds from Cache + GraphQL (Single Source of Truth)
     useEffect(() => {
-        const loadGraphQL = async () => {
-            if (!lotteryApplication) return;
-            const q = {
-                query: `query { allRounds { id status ticketPrice totalTicketsSold prizePool createdAt closedAt } }`
-            };
-            const res = await lotteryApplication.query(JSON.stringify(q));
-            const parsed = typeof res === 'string' ? JSON.parse(res) : res;
-            const list = parsed?.data?.allRounds || [];
-            const mapped: LotteryRound[] = list.map((r: any) => {
-                const createdMs = r.createdAt ? (toMs(r.createdAt) ?? Date.now()) : Date.now();
-                const endMs = createdMs + 5 * 60 * 1000;
-                return {
-                    id: String(r.id),
-                    status: ((): LotteryStatus => {
-                        const su = String(r.status).toUpperCase() as LotteryStatus;
-                        if (su === 'ACTIVE' && endMs <= Date.now()) return 'CLOSED';
-                        return su;
-                    })(),
-                    prizePool: String(r.prizePool),
-                    ticketPrice: String(r.ticketPrice),
-                    endTime: endMs,
-                    ticketsSold: Number(r.totalTicketsSold || 0),
-                    winners: [],
-                };
-            });
-
-            // Prefer latest non-COMPLETE as active
-            // Since we fetch all, sort descending by ID
-            const activeCandidate = mapped
-                .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
-                .sort((a, b) => Number(b.id) - Number(a.id))[0]
-
+        const syncRounds = async () => {
+            // 1. Prepare base rounds from Supabase Cache
             let combined = (dbRoundsCache || []).map((r: any) => {
                 const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
                 const endMs = createdMs + 5 * 60 * 1000;
                 const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
                 const winners: Winner[] = []
-                // const revealed = statusUpper === 'COMPLETE' ? winners : [];
                 return {
                     id: String(r.id),
                     status: statusUpper,
@@ -178,24 +105,66 @@ export function LotterySection() {
                     ticketsSold: Number(r.total_tickets_sold || 0),
                     winners,
                 } as LotteryRound
-            })
+            });
 
-            if (activeCandidate) {
-                console.log('[Lottery Sync] GraphQL Active Candidate:', activeCandidate.id, activeCandidate.status);
-                const idx = combined.findIndex(rr => rr.id === activeCandidate.id)
-                if (idx >= 0) {
-                    combined[idx] = { ...combined[idx], ...activeCandidate }
-                } else {
-                    combined.unshift(activeCandidate)
+            // 2. If Wallet Connected, Fetch & Merge GraphQL Data
+            if (lotteryApplication) {
+                try {
+                    const q = {
+                        query: `query { allRounds { id status ticketPrice totalTicketsSold prizePool createdAt closedAt } }`
+                    };
+                    const res = await lotteryApplication.query(JSON.stringify(q));
+                    const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+                    const list = parsed?.data?.allRounds || [];
+
+                    const gqlMapped: LotteryRound[] = list.map((r: any) => {
+                        const createdMs = r.createdAt ? (toMs(r.createdAt) ?? Date.now()) : Date.now();
+                        const endMs = createdMs + 5 * 60 * 1000;
+                        return {
+                            id: String(r.id),
+                            status: ((): LotteryStatus => {
+                                const su = String(r.status).toUpperCase() as LotteryStatus;
+                                if (su === 'ACTIVE' && endMs <= Date.now()) return 'CLOSED';
+                                return su;
+                            })(),
+                            prizePool: String(r.prizePool),
+                            ticketPrice: String(r.ticketPrice),
+                            endTime: endMs,
+                            ticketsSold: Number(r.totalTicketsSold || 0),
+                            winners: [],
+                        };
+                    });
+
+                    // Find active candidate from GraphQL
+                    const activeCandidate = gqlMapped
+                        .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
+                        .sort((a, b) => Number(b.id) - Number(a.id))[0];
+
+                    if (activeCandidate) {
+                        console.log('[Lottery Sync] GraphQL Active Candidate:', activeCandidate.id, activeCandidate.status);
+                        const idx = combined.findIndex(rr => rr.id === activeCandidate.id);
+                        if (idx >= 0) {
+                            // Merge: Keep Supabase winners if present (since GQL doesn't have winners yet in this query)
+                            combined[idx] = {
+                                ...combined[idx],
+                                ...activeCandidate,
+                                winners: combined[idx].winners.length > 0 ? combined[idx].winners : activeCandidate.winners
+                            };
+                        } else {
+                            combined.unshift(activeCandidate);
+                        }
+                    }
+                } catch (e) {
+                    console.error("GraphQL Sync Error:", e);
                 }
             }
 
-            // Ensure combined list is sorted descending by ID
+            // 3. Sort & Update State
             combined.sort((a, b) => Number(b.id) - Number(a.id));
-
-            setRounds(combined)
+            setRounds(combined);
         };
-        loadGraphQL();
+
+        syncRounds();
     }, [lotteryApplication, dbRoundsCache]);
 
     const handleBuyTicket = async (amountTokens: string) => {
@@ -204,7 +173,7 @@ export function LotterySection() {
     };
 
     const activeRound = rounds.find(r => r.status === "ACTIVE" || r.status === "CLOSED" || r.status === "DRAWING");
-    const historyRounds = rounds.filter(r => r.status === "COMPLETE").reverse();
+    const historyRounds = rounds.filter(r => r.status === "COMPLETE");
 
     return (
         <div className="space-y-8">
