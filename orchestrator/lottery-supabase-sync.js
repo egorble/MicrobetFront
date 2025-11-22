@@ -49,11 +49,27 @@ async function executeQuery(endpoint, query) {
   const t = new Date().toISOString()
   const compact = String(query).replace(/\s+/g, ' ').trim()
   console.log(`[${t}] [lottery-sync] POST ${endpoint} query: ${compact}`)
-  const res = await axios.post(endpoint, { query }, { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, timeout: 10000 })
-  const data = res.data?.data || {}
-  const keys = Object.keys(data)
-  console.log(`[${t}] [lottery-sync] RESPONSE keys=${keys.join(',')} size=${JSON.stringify(data).length}`)
-  return data
+  try {
+    const res = await axios.post(endpoint, { query }, {
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      timeout: 10000,
+      validateStatus: () => true
+    })
+    if (res.status < 200 || res.status >= 300) {
+      console.error(`[${t}] [lottery-sync] HTTP ${res.status} ${res.statusText}`)
+      return {}
+    }
+    const data = res.data?.data || {}
+    if (res.data?.errors) {
+      console.error(`[${t}] [lottery-sync] GraphQL errors:`, JSON.stringify(res.data.errors))
+    }
+    const keys = Object.keys(data)
+    console.log(`[${t}] [lottery-sync] RESPONSE keys=${keys.join(',')} size=${JSON.stringify(data).length}`)
+    return data
+  } catch (err) {
+    console.error(`[${t}] [lottery-sync] POST failed:`, err.message || err)
+    return {}
+  }
 }
 
 const ALL_ROUNDS_QUERY = `query { allRounds { ticketPrice totalTicketsSold status closedAt createdAt prizePool id } }`
@@ -157,12 +173,61 @@ function mapRound(r) {
   }
 }
 
+function toMsRaw(v) {
+  try {
+    if (v === null || v === undefined) return null
+    if (typeof v === 'number') {
+      const num = v
+      if (num >= 1e17) return Math.floor(num / 1e6)
+      if (num >= 1e13) return Math.floor(num / 1e3)
+      if (num >= 1e11) return num
+      if (num >= 1e9) return num * 1000
+      return num
+    }
+    const s = String(v).trim()
+    if (/^[+\-]?\d+(\.\d+)?$/.test(s)) {
+      const num = Number(s)
+      if (num >= 1e17) return Math.floor(num / 1e6)
+      if (num >= 1e13) return Math.floor(num / 1e3)
+      if (num >= 1e11) return num
+      if (num >= 1e9) return num * 1000
+      return num
+    }
+    const d = new Date(s)
+    const t = d.getTime()
+    if (isNaN(t)) return null
+    return t
+  } catch { return null }
+}
+
+function mapRound(r) {
+  const createdMs = toMsRaw(r.createdAt)
+  const closedMs = toMsRaw(r.closedAt)
+  const createdIso = createdMs ? new Date(createdMs).toISOString() : null
+  const closedIso = closedMs ? new Date(closedMs).toISOString() : null
+  try { console.log(`[lottery-sync] mapRound id=${r.id} status=${r.status} rawCreated=${r.createdAt} rawClosed=${r.closedAt} createdMs=${createdMs} closedMs=${closedMs} now=${Date.now()} diffCreatedMs=${createdMs != null ? Date.now() - createdMs : 'n/a'}`) } catch {}
+  return {
+    id: Number(r.id),
+    status: String(r.status),
+    ticket_price: String(r.ticketPrice),
+    total_tickets_sold: Number(r.totalTicketsSold),
+    prize_pool: String(r.prizePool),
+    created_at: createdIso,
+    closed_at: closedIso,
+  }
+}
+
 async function upsertRounds(rounds) {
   if (!supabase) throw new Error('Supabase not configured')
   const payload = rounds.map(mapRound)
   if (!payload.length) return
-  const { error } = await supabase.from('lottery_rounds').upsert(payload, { onConflict: 'id' })
-  if (error) throw error
+  for (const row of payload) {
+    const { error } = await supabase.from('lottery_rounds').upsert([row], { onConflict: 'id' })
+    try { console.log(`[lottery-sync] upsert round id=${row.id} status=${row.status} created_at=${row.created_at} closed_at=${row.closed_at}`) } catch {}
+    if (error) {
+      try { console.error('[lottery-sync] upsert round error', error.message) } catch {}
+    }
+  }
 }
 
 async function handleEvent() {

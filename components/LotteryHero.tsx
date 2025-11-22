@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Ticket, Clock, Trophy, Check, AlertCircle, ArrowRight, Sparkles, Crown } from "lucide-react";
-import { LotteryRound, Winner } from "./LotterySection";
+import { Ticket, Clock, Sparkles, Check, AlertCircle, ArrowRight } from "lucide-react";
+import { LotteryRound } from "./LotterySection";
 import { LightningAnimation } from "./LightningAnimation";
 
 interface LotteryHeroProps {
@@ -65,9 +65,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
         }, 1500);
     };
 
-    const isActive = round.status === "ACTIVE";
-    const isDrawing = round.status === "DRAWING";
-    const isClosed = round.status === "CLOSED";
+    const isActive = round.status === "ACTIVE" && (round.endTime - Date.now() > 0);
+    const isDrawing = round.status === "DRAWING" || round.status === "CLOSED";
 
     return (
         <div className="relative overflow-hidden rounded-3xl bg-white border border-gray-200 shadow-xl">
@@ -162,8 +161,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
 
                                 {status && (
                                     <div className={`p-3 rounded-lg flex items-start gap-2 text-sm ${status.type === 'success' ? 'bg-green-50 text-green-700' :
-                                            status.type === 'error' ? 'bg-red-50 text-red-700' :
-                                                'bg-blue-50 text-blue-700'
+                                        status.type === 'error' ? 'bg-red-50 text-red-700' :
+                                            'bg-blue-50 text-blue-700'
                                         }`}>
                                         {status.type === 'success' ? <Check className="w-4 h-4 mt-0.5" /> :
                                             status.type === 'error' ? <AlertCircle className="w-4 h-4 mt-0.5" /> :
@@ -207,12 +206,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                                 key={winner.ticketId}
                                                 className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-300 flex items-center gap-3"
                                             >
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${winner.rank === 1 ? "bg-yellow-100 text-yellow-700" :
-                                                        winner.rank === 2 ? "bg-gray-100 text-gray-700" :
-                                                            winner.rank === 3 ? "bg-orange-100 text-orange-700" :
-                                                                "bg-blue-50 text-blue-600"
-                                                    }`}>
-                                                    {winner.rank === 1 ? <Crown className="w-4 h-4" /> : `#${winner.rank}`}
+                                                <div className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">
+                                                    <Ticket className="w-4 h-4" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="text-xs text-gray-500">Ticket #{winner.ticketId}</div>
@@ -238,7 +233,7 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                         ) : (
                             <div className="text-center py-8 space-y-4">
                                 <div className="w-20 h-20 mx-auto bg-amber-50 rounded-full flex items-center justify-center animate-pulse">
-                                    <Trophy className="w-10 h-10 text-amber-500" />
+                                    <Clock className="w-10 h-10 text-amber-500" />
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-bold text-gray-900">Drawing Winner</h3>

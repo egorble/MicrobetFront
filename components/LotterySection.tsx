@@ -3,6 +3,7 @@ import { LotteryHero } from "./LotteryHero";
 import { LotteryHistory } from "./LotteryHistory";
 import { supabaseLottery } from "../utils/supabaseClient";
 import { useLinera } from "./LineraProvider";
+import { parseTimestamp } from "../utils/timeUtils";
 
 export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
 
@@ -10,7 +11,6 @@ export interface Winner {
     ticketId: string;
     owner: string;
     amount: string;
-    rank: number; // 1st, 2nd, 3rd...
 }
 
 export interface LotteryRound {
@@ -29,6 +29,11 @@ export function LotterySection() {
     const { lotteryApplication } = useLinera() as any;
     const [rounds, setRounds] = useState<LotteryRound[]>([]);
     const [latestWinners, setLatestWinners] = useState<Winner[]>([]);
+    const [dbRoundsCache, setDbRoundsCache] = useState<any[]>([]);
+
+    const toMs = (v: any): number | null => {
+        try { return parseTimestamp(v) } catch { return null }
+    };
 
     useEffect(() => {
         const load = async () => {
@@ -48,7 +53,6 @@ export function LotterySection() {
             (latestWinners || []).forEach((w: any, idx: number) => {
                 const list = winnersByRound.get(Number(w.round_id)) || [];
                 list.push({
-                    rank: list.length + 1,
                     ticketId: String(w.ticket_number),
                     owner: String(w.source_chain_id || 'unknown'),
                     amount: String(w.prize_amount)
@@ -56,26 +60,33 @@ export function LotterySection() {
                 winnersByRound.set(Number(w.round_id), list);
             });
 
+            setDbRoundsCache(dbRounds || [])
             const mapped: LotteryRound[] = (dbRounds || []).map((r: any) => {
-                const createdMs = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+                console.log('[lottery-ui] raw created_at:', r.created_at, 'id:', r.id);
+                const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
                 const endMs = createdMs + 5 * 60 * 1000;
+                console.log('[lottery-ui] parsed created_ms:', createdMs, 'end_ms:', endMs, 'now:', Date.now());
                 const winners = winnersByRound.get(Number(r.id)) || [];
+                let statusUpper = String(r.status).toUpperCase() as LotteryStatus;
+                if (statusUpper === 'ACTIVE' && endMs <= Date.now()) {
+                    statusUpper = 'CLOSED';
+                }
+                const revealed = statusUpper === 'COMPLETE' ? winners : [];
                 return {
                     id: String(r.id),
-                    status: String(r.status).toUpperCase() as LotteryStatus,
+                    status: statusUpper,
                     prizePool: String(r.prize_pool),
                     ticketPrice: String(r.ticket_price),
                     endTime: endMs,
                     ticketsSold: Number(r.total_tickets_sold || 0),
                     winners,
-                    revealedWinners: winners
+                    revealedWinners: revealed
                 };
             });
 
             setRounds(mapped);
 
             const latest20: Winner[] = (latestWinners || []).slice(0, 20).map((w: any, idx: number) => ({
-                rank: idx + 1,
                 ticketId: String(w.ticket_number),
                 owner: String(w.source_chain_id || 'unknown'),
                 amount: String(w.prize_amount)
@@ -99,6 +110,25 @@ export function LotterySection() {
         };
     }, []);
 
+    // Reveal winners one by one every 10 seconds while drawing
+    useEffect(() => {
+        const REVEAL_INTERVAL_MS = 10000;
+        const timer = setInterval(() => {
+            setRounds(current => current.map(r => {
+                const isDrawing = r.status === 'CLOSED' || r.status === 'DRAWING';
+                if (!isDrawing) return r;
+                const have = r.revealedWinners.length;
+                const total = r.winners.length;
+                if (have < total) {
+                    const next = r.winners[have];
+                    return { ...r, revealedWinners: [...r.revealedWinners, next] };
+                }
+                return r;
+            }))
+        }, REVEAL_INTERVAL_MS);
+        return () => clearInterval(timer);
+    }, [rounds.length]);
+
     useEffect(() => {
         const loadGraphQL = async () => {
             if (!lotteryApplication) return;
@@ -109,11 +139,17 @@ export function LotterySection() {
             const parsed = typeof res === 'string' ? JSON.parse(res) : res;
             const list = parsed?.data?.allRounds || [];
             const mapped: LotteryRound[] = list.map((r: any) => {
-                const createdMs = r.createdAt ? Date.parse(r.createdAt) : Date.now();
+                console.log('[lottery-ui] gql createdAt:', r.createdAt, 'id:', r.id);
+                const createdMs = r.createdAt ? (toMs(r.createdAt) ?? Date.now()) : Date.now();
                 const endMs = createdMs + 5 * 60 * 1000;
+                console.log('[lottery-ui] gql parsed created_ms:', createdMs, 'end_ms:', endMs);
                 return {
                     id: String(r.id),
-                    status: String(r.status).toUpperCase() as LotteryStatus,
+                    status: ((): LotteryStatus => {
+                        const su = String(r.status).toUpperCase() as LotteryStatus;
+                        if (su === 'ACTIVE' && endMs <= Date.now()) return 'CLOSED';
+                        return su;
+                    })(),
                     prizePool: String(r.prizePool),
                     ticketPrice: String(r.ticketPrice),
                     endTime: endMs,
@@ -122,13 +158,41 @@ export function LotterySection() {
                     revealedWinners: []
                 };
             });
-            if (!mapped.length) return;
-            setRounds(mapped);
+            // Prefer latest non-COMPLETE as active
+            const activeCandidate = mapped
+                .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
+                .sort((a, b) => Number(b.id) - Number(a.id))[0]
+            let combined = (dbRoundsCache || []).map((r: any) => {
+                const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
+                const endMs = createdMs + 5 * 60 * 1000;
+                const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
+                const winners: Winner[] = []
+                const revealed = statusUpper === 'COMPLETE' ? winners : [];
+                return {
+                    id: String(r.id),
+                    status: statusUpper,
+                    prizePool: String(r.prize_pool),
+                    ticketPrice: String(r.ticket_price),
+                    endTime: endMs,
+                    ticketsSold: Number(r.total_tickets_sold || 0),
+                    winners,
+                    revealedWinners: revealed
+                } as LotteryRound
+            })
+            if (activeCandidate) {
+                console.log('[lottery-ui] activeCandidate', activeCandidate)
+                const idx = combined.findIndex(rr => rr.id === activeCandidate.id)
+                if (idx >= 0) {
+                    combined[idx] = { ...combined[idx], ...activeCandidate }
+                } else {
+                    combined.unshift(activeCandidate)
+                }
+            }
+            console.log('[lottery-ui] combined rounds:', combined.map(r => ({ id: r.id, status: r.status, endTime: r.endTime })))
+            setRounds(combined)
         };
-        if (rounds.length === 0) {
-            loadGraphQL();
-        }
-    }, [lotteryApplication, rounds.length]);
+        loadGraphQL();
+    }, [lotteryApplication, dbRoundsCache]);
 
     const handleBuyTicket = async (amountTokens: string) => {
         if (!purchaseTickets) return;
