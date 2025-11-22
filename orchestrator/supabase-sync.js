@@ -3,9 +3,34 @@ const WebSocket = require('ws')
 const { createClient } = require('@supabase/supabase-js')
 const { Pool } = require('pg')
 const config = require('./config')
+const fs = require('fs')
+const path = require('path')
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://krvnqndokmyjbjonqauz.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+function loadLocalEnv() {
+  const dirs = [__dirname, path.resolve(__dirname, '..')]
+  const files = ['.env', '.env.local']
+  for (const dir of dirs) {
+    for (const name of files) {
+      const p = path.join(dir, name)
+      if (fs.existsSync(p)) {
+        const text = fs.readFileSync(p, 'utf8')
+        for (const line of text.split(/\r?\n/)) {
+          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+          if (m) {
+            const k = m[1]
+            const v = m[2].replace(/^"|"$/g, '')
+            if (!process.env[k]) process.env[k] = v
+          }
+        }
+      }
+    }
+  }
+}
+
+loadLocalEnv()
+
+const SUPABASE_URL = process.env.SUPABASE_URL || config.supabase?.url || 'https://oznvztsgrgfcithgnosn.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
 const SUPABASE_DB_URL = process.env.SUPABASE_DB_URL
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
 const pgPool = SUPABASE_DB_URL ? new Pool({ connectionString: SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } }) : null

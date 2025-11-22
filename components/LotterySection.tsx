@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { LotteryHero } from "./LotteryHero";
 import { LotteryHistory } from "./LotteryHistory";
+import { supabaseLottery } from "../utils/supabaseClient";
+import { useLinera } from "./LineraProvider";
 
 export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
 
@@ -23,152 +25,114 @@ export interface LotteryRound {
 }
 
 export function LotterySection() {
-    // Initial mock data
-    const [rounds, setRounds] = useState<LotteryRound[]>([
-        {
-            id: "1024",
-            status: "COMPLETE",
-            prizePool: "5000",
-            ticketPrice: "5",
-            endTime: Date.now() - 100000,
-            ticketsSold: 1000,
-            winners: [
-                { ticketId: "8842", owner: "0x1234...5678", amount: "2500", rank: 1 },
-                { ticketId: "1234", owner: "0xabcd...efgh", amount: "1000", rank: 2 },
-                { ticketId: "5678", owner: "0x9876...5432", amount: "500", rank: 3 }
-            ],
-            revealedWinners: [
-                { ticketId: "8842", owner: "0x1234...5678", amount: "2500", rank: 1 },
-                { ticketId: "1234", owner: "0xabcd...efgh", amount: "1000", rank: 2 },
-                { ticketId: "5678", owner: "0x9876...5432", amount: "500", rank: 3 }
-            ]
-        },
-        {
-            id: "1025",
-            status: "ACTIVE",
-            prizePool: "1250",
-            ticketPrice: "5",
-            endTime: Date.now() + 30000, // 30 seconds for demo
-            ticketsSold: 250,
-            winners: [],
-            revealedWinners: []
-        }
-    ]);
+    const { purchaseTickets } = useLinera();
+    const { lotteryApplication } = useLinera() as any;
+    const [rounds, setRounds] = useState<LotteryRound[]>([]);
+    const [latestWinners, setLatestWinners] = useState<Winner[]>([]);
 
-    // Simulation Loop
     useEffect(() => {
-        const interval = setInterval(() => {
-            const now = Date.now();
+        const load = async () => {
+            const { data: dbRounds } = await supabaseLottery
+                .from('lottery_rounds')
+                .select('*')
+                .order('id', { ascending: true })
+                .limit(50);
 
-            setRounds(currentRounds => {
-                return currentRounds.map(round => {
-                    // Active -> Closed
-                    if (round.status === "ACTIVE" && round.endTime <= now) {
-                        return { ...round, status: "CLOSED", endTime: now + 3000 }; // 3s pause before drawing
-                    }
+            const { data: latestWinners } = await supabaseLottery
+                .from('lottery_winners')
+                .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
+                .order('created_at', { ascending: false })
+                .limit(200);
 
-                    // Closed -> Drawing (Generate Winners)
-                    if (round.status === "CLOSED" && round.endTime <= now) {
-                        const totalPrize = parseFloat(round.prizePool);
-                        const newWinners: Winner[] = [
-                            {
-                                rank: 1,
-                                amount: (totalPrize * 0.5).toFixed(0),
-                                ticketId: Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
-                                owner: `0x${Math.random().toString(16).substr(2, 40)}`
-                            },
-                            {
-                                rank: 2,
-                                amount: (totalPrize * 0.3).toFixed(0),
-                                ticketId: Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
-                                owner: `0x${Math.random().toString(16).substr(2, 40)}`
-                            },
-                            {
-                                rank: 3,
-                                amount: (totalPrize * 0.1).toFixed(0),
-                                ticketId: Math.floor(Math.random() * 10000).toString().padStart(4, '0'),
-                                owner: `0x${Math.random().toString(16).substr(2, 40)}`
-                            }
-                        ];
-
-                        return {
-                            ...round,
-                            status: "DRAWING",
-                            winners: newWinners,
-                            revealedWinners: [],
-                            endTime: now + 1000 // Start revealing in 1s
-                        };
-                    }
-
-                    // Drawing Logic (Reveal one by one)
-                    if (round.status === "DRAWING" && round.endTime <= now) {
-                        const nextIndex = round.revealedWinners.length;
-
-                        // If all revealed, move to COMPLETE
-                        if (nextIndex >= round.winners.length) {
-                            return { ...round, status: "COMPLETE" };
-                        }
-
-                        // Reveal next winner
-                        return {
-                            ...round,
-                            revealedWinners: [...round.revealedWinners, round.winners[nextIndex]],
-                            endTime: now + 4000 // 4 seconds between reveals
-                        };
-                    }
-
-                    return round;
+            const winnersByRound = new Map<number, Winner[]>();
+            (latestWinners || []).forEach((w: any, idx: number) => {
+                const list = winnersByRound.get(Number(w.round_id)) || [];
+                list.push({
+                    rank: list.length + 1,
+                    ticketId: String(w.ticket_number),
+                    owner: String(w.source_chain_id || 'unknown'),
+                    amount: String(w.prize_amount)
                 });
+                winnersByRound.set(Number(w.round_id), list);
             });
 
-            // Check if we need a new round
-            setRounds(currentRounds => {
-                const activeRound = currentRounds.find(r => r.status === "ACTIVE" || r.status === "CLOSED" || r.status === "DRAWING");
-
-                // If no active round, start the next one
-                if (!activeRound) {
-                    const lastRoundId = parseInt(currentRounds[currentRounds.length - 1].id);
-                    const newRound: LotteryRound = {
-                        id: (lastRoundId + 1).toString(),
-                        status: "ACTIVE",
-                        prizePool: "0",
-                        ticketPrice: "5",
-                        endTime: Date.now() + 30000, // 30s rounds
-                        ticketsSold: 0,
-                        winners: [],
-                        revealedWinners: []
-                    };
-
-                    const newRounds = [...currentRounds, newRound];
-                    if (newRounds.length > 10) {
-                        return newRounds.slice(newRounds.length - 10);
-                    }
-                    return newRounds;
-                }
-
-                return currentRounds;
+            const mapped: LotteryRound[] = (dbRounds || []).map((r: any) => {
+                const createdMs = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+                const endMs = createdMs + 5 * 60 * 1000;
+                const winners = winnersByRound.get(Number(r.id)) || [];
+                return {
+                    id: String(r.id),
+                    status: String(r.status).toUpperCase() as LotteryStatus,
+                    prizePool: String(r.prize_pool),
+                    ticketPrice: String(r.ticket_price),
+                    endTime: endMs,
+                    ticketsSold: Number(r.total_tickets_sold || 0),
+                    winners,
+                    revealedWinners: winners
+                };
             });
 
-        }, 1000);
+            setRounds(mapped);
 
-        return () => clearInterval(interval);
+            const latest20: Winner[] = (latestWinners || []).slice(0, 20).map((w: any, idx: number) => ({
+                rank: idx + 1,
+                ticketId: String(w.ticket_number),
+                owner: String(w.source_chain_id || 'unknown'),
+                amount: String(w.prize_amount)
+            }))
+            setLatestWinners(latest20)
+        };
+
+        load();
+
+        const chRounds = supabaseLottery
+            .channel('lottery_rounds_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_rounds' }, load)
+            .subscribe();
+        const chWinners = supabaseLottery
+            .channel('lottery_winners_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, load)
+            .subscribe();
+        return () => {
+            supabaseLottery.removeChannel(chRounds);
+            supabaseLottery.removeChannel(chWinners);
+        };
     }, []);
 
-    const handleBuyTicket = (amount: string) => {
-        setRounds(currentRounds =>
-            currentRounds.map(round => {
-                if (round.status === "ACTIVE") {
-                    const ticketCount = parseInt(amount);
-                    const addedPool = ticketCount * parseFloat(round.ticketPrice);
-                    return {
-                        ...round,
-                        ticketsSold: round.ticketsSold + ticketCount,
-                        prizePool: (parseFloat(round.prizePool) + addedPool).toString()
-                    };
-                }
-                return round;
-            })
-        );
+    useEffect(() => {
+        const loadGraphQL = async () => {
+            if (!lotteryApplication) return;
+            const q = {
+                query: `query { allRounds { id status ticketPrice totalTicketsSold prizePool createdAt closedAt } }`
+            };
+            const res = await lotteryApplication.query(JSON.stringify(q));
+            const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+            const list = parsed?.data?.allRounds || [];
+            const mapped: LotteryRound[] = list.map((r: any) => {
+                const createdMs = r.createdAt ? Date.parse(r.createdAt) : Date.now();
+                const endMs = createdMs + 5 * 60 * 1000;
+                return {
+                    id: String(r.id),
+                    status: String(r.status).toUpperCase() as LotteryStatus,
+                    prizePool: String(r.prizePool),
+                    ticketPrice: String(r.ticketPrice),
+                    endTime: endMs,
+                    ticketsSold: Number(r.totalTicketsSold || 0),
+                    winners: [],
+                    revealedWinners: []
+                };
+            });
+            if (!mapped.length) return;
+            setRounds(mapped);
+        };
+        if (rounds.length === 0) {
+            loadGraphQL();
+        }
+    }, [lotteryApplication, rounds.length]);
+
+    const handleBuyTicket = async (amountTokens: string) => {
+        if (!purchaseTickets) return;
+        await purchaseTickets(amountTokens);
     };
 
     const activeRound = rounds.find(r => r.status === "ACTIVE" || r.status === "CLOSED" || r.status === "DRAWING");
@@ -185,7 +149,7 @@ export function LotterySection() {
             )}
 
             {/* History Section */}
-            <LotteryHistory rounds={historyRounds} />
+            <LotteryHistory rounds={historyRounds} latest={latestWinners} />
         </div>
     );
 }

@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node orchestrator.js",
     "dev": "nodemon orchestrator.js",
+    "lottery:sync": "node lottery-supabase-sync.js",
+    "dev:lottery:sync": "nodemon lottery-supabase-sync.js",
     "lottery": "node lottery-orchestrator.js",
     "dev:lottery": "nodemon lottery-orchestrator.js",
-    "lottery:sync": "node supabase-sync-lottery.js",
-    "dev:lottery:sync": "nodemon supabase-sync-lottery.js",
+    "test:lottery:supabase": "node test-lottery-supabase.js",
     "test": "node -e \"console.log('Testing orchestrator...'); require('./orchestrator.js')\""
   },
   "dependencies": {

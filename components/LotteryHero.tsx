@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Ticket, Clock, Trophy, Check, AlertCircle, ArrowRight, Sparkles, Crown } from "lucide-react";
 import { LotteryRound, Winner } from "./LotterySection";
 import { LightningAnimation } from "./LightningAnimation";
@@ -10,10 +10,12 @@ interface LotteryHeroProps {
 
 export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
     const [timeLeft, setTimeLeft] = useState<string>('00:00');
-    const [amount, setAmount] = useState('1');
+    const [amount, setAmount] = useState('10');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
     const [lightningActive, setLightningActive] = useState(false);
+
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     // Timer logic
     useEffect(() => {
@@ -35,6 +37,13 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
     }, [round.endTime]);
+
+    // Auto-scroll to bottom of winner list
+    useEffect(() => {
+        if (round.status === "DRAWING" && scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [round.revealedWinners.length, round.status]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -129,41 +138,25 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                         {isActive ? (
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="text-center mb-4">
-                                    <h3 className="text-xl font-bold text-gray-900">Buy Tickets</h3>
-                                    <p className="text-sm text-gray-500">Increase your chances to win!</p>
+                                    <h3 className="text-xl font-bold text-gray-900">Purchase</h3>
+                                    <p className="text-sm text-gray-500">Enter token amount to spend</p>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-700">Quantity</label>
+                                    <label className="text-sm font-medium text-gray-700">Amount (LNRA)</label>
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setAmount(Math.max(1, parseInt(amount) - 1).toString())}
-                                            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
-                                        >
-                                            -
-                                        </button>
                                         <input
                                             type="number"
                                             value={amount}
                                             onChange={(e) => setAmount(e.target.value)}
                                             min="1"
-                                            max="100"
+                                            step="1"
                                             className="flex-1 text-center py-2 border border-gray-200 rounded-lg font-bold text-lg focus:ring-2 focus:ring-red-500 outline-none"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setAmount((parseInt(amount) + 1).toString())}
-                                            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
-                                        >
-                                            +
-                                        </button>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-gray-500">Total Cost:</span>
-                                        <span className="font-bold text-red-600">
-                                            {(parseInt(amount || '0') * parseFloat(round.ticketPrice)).toFixed(2)} LNRA
-                                        </span>
+                                        <span className="text-gray-500">Total Tokens:</span>
+                                        <span className="font-bold text-red-600">{parseFloat(amount || '0').toFixed(2)} LNRA</span>
                                     </div>
                                 </div>
 
@@ -186,7 +179,7 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                 >
                                     {isSubmitting ? 'Processing...' : (
                                         <>
-                                            Buy Now <ArrowRight className="w-4 h-4" />
+                                            Buy Tickets <ArrowRight className="w-4 h-4" />
                                         </>
                                     )}
                                 </button>
@@ -200,22 +193,26 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                     </h3>
                                 </div>
 
-                                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
+                                <div
+                                    ref={scrollRef}
+                                    className="space-y-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin scroll-smooth"
+                                >
                                     {round.revealedWinners.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400 animate-pulse">
                                             Selecting winners...
                                         </div>
                                     ) : (
-                                        round.revealedWinners.slice().reverse().map((winner, index) => (
+                                        round.revealedWinners.map((winner, index) => (
                                             <div
                                                 key={winner.ticketId}
-                                                className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-500 flex items-center gap-3"
+                                                className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-300 flex items-center gap-3"
                                             >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${winner.rank === 1 ? "bg-yellow-100 text-yellow-700" :
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${winner.rank === 1 ? "bg-yellow-100 text-yellow-700" :
                                                         winner.rank === 2 ? "bg-gray-100 text-gray-700" :
-                                                            "bg-orange-100 text-orange-700"
+                                                            winner.rank === 3 ? "bg-orange-100 text-orange-700" :
+                                                                "bg-blue-50 text-blue-600"
                                                     }`}>
-                                                    {winner.rank === 1 ? <Crown className="w-5 h-5" /> : <span className="font-bold">#{winner.rank}</span>}
+                                                    {winner.rank === 1 ? <Crown className="w-4 h-4" /> : `#${winner.rank}`}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="text-xs text-gray-500">Ticket #{winner.ticketId}</div>

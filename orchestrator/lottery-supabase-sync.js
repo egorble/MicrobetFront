@@ -1,0 +1,213 @@
+const axios = require('axios')
+const WebSocket = require('ws')
+const { createClient } = require('@supabase/supabase-js')
+const config = require('./config')
+const fs = require('fs')
+const path = require('path')
+
+function loadLocalEnv() {
+  const dirs = [__dirname, path.resolve(__dirname, '..')]
+  const files = ['.env', '.env.local']
+  for (const dir of dirs) {
+    for (const name of files) {
+      const p = path.join(dir, name)
+      if (fs.existsSync(p)) {
+        const text = fs.readFileSync(p, 'utf8')
+        for (const line of text.split(/\r?\n/)) {
+          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+          if (m) {
+            const k = m[1]
+            const v = m[2].replace(/^"|"$/g, '')
+            if (!process.env[k]) process.env[k] = v
+          }
+        }
+      }
+    }
+  }
+}
+
+loadLocalEnv()
+
+const SUPABASE_URL = process.env.SUPABASE_URL_LOTTERY || process.env.SUPABASE_URL || config.supabase?.url || 'https://oznvztsgrgfcithgnosn.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY_LOTTERY || process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
+const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
+
+const LOTTERY_HTTP = config.endpoints?.LOTTERY || 'http://localhost:8081/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/c2dad20dd15958901615a149e3de7852ce369d8663230c3d8c938dbd509018ee'
+
+function extractChainId(endpointUrl) {
+  const m = endpointUrl.match(/\/chains\/([^/]+)/)
+  return m ? m[1] : null
+}
+
+function endpointToWsUrl(endpointUrl) {
+  const m = endpointUrl.match(/^http:\/\/([^/]+)/)
+  const host = m ? m[1] : null
+  return host ? `ws://${host}/ws` : null
+}
+
+async function executeQuery(endpoint, query) {
+  const t = new Date().toISOString()
+  const compact = String(query).replace(/\s+/g, ' ').trim()
+  console.log(`[${t}] [lottery-sync] POST ${endpoint} query: ${compact}`)
+  const res = await axios.post(endpoint, { query }, { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, timeout: 10000 })
+  const data = res.data?.data || {}
+  const keys = Object.keys(data)
+  console.log(`[${t}] [lottery-sync] RESPONSE keys=${keys.join(',')} size=${JSON.stringify(data).length}`)
+  return data
+}
+
+const ALL_ROUNDS_QUERY = `query { allRounds { ticketPrice totalTicketsSold status closedAt createdAt prizePool id } }`
+
+function toIsoSafe(v) {
+  try {
+    if (v === null || v === undefined) return null
+    if (typeof v === 'number') {
+      let ms = v
+      if (v >= 1e17) ms = Math.floor(v / 1e6)
+      else if (v >= 1e13) ms = Math.floor(v / 1e3)
+      else if (v >= 1e11) ms = v
+      else if (v >= 1e9) ms = v * 1000
+      const d = new Date(ms)
+      if (isNaN(d.getTime())) return null
+      return d.toISOString()
+    }
+    const s = String(v).trim()
+    const norm = s.startsWith('+') ? s.slice(1) : s
+    const num = Number(norm)
+    if (!Number.isNaN(num) && norm !== '') {
+      let ms = num
+      if (num >= 1e17) ms = Math.floor(num / 1e6)
+      else if (num >= 1e13) ms = Math.floor(num / 1e3)
+      else if (num >= 1e11) ms = num
+      else if (num >= 1e9) ms = num * 1000
+      const dNum = new Date(ms)
+      if (!isNaN(dNum.getTime())) return dNum.toISOString()
+    }
+    const d = new Date(norm)
+    if (isNaN(d.getTime())) return null
+    return d.toISOString()
+  } catch {
+    return null
+  }
+}
+
+async function fetchAllRounds() {
+  const data = await executeQuery(LOTTERY_HTTP, ALL_ROUNDS_QUERY)
+  const rounds = data?.allRounds || []
+  console.log(`[${new Date().toISOString()}] [lottery-sync] allRounds count=${rounds.length}`)
+  return rounds
+}
+
+function latestTargetRound(rounds) {
+  const statusOf = (r) => String(r.status).toUpperCase()
+  const byIdDesc = (a, b) => Number(b.id) - Number(a.id)
+
+  const closed = rounds.filter(r => statusOf(r) === 'CLOSED').sort(byIdDesc)
+  if (closed.length) return { id: closed[0].id, status: 'CLOSED' }
+
+  const complete = rounds.filter(r => statusOf(r) === 'COMPLETE').sort(byIdDesc)
+  if (complete.length) return { id: complete[0].id, status: 'COMPLETE' }
+
+  return null
+}
+
+function mapWinner(roundId, w) {
+  return {
+    round_id: Number(roundId),
+    ticket_number: String(w.ticketNumber),
+    source_chain_id: String(w.sourceChainId || 'unknown'),
+    prize_amount: String(w.prizeAmount),
+  }
+}
+
+async function fetchRoundWinners(roundId) {
+  const q = `query { roundWinners(roundId: ${Number(roundId)}) { ticketNumber sourceChainId prizeAmount } }`
+  const data = await executeQuery(LOTTERY_HTTP, q)
+  const winners = data?.roundWinners || []
+  console.log(`[${new Date().toISOString()}] [lottery-sync] roundWinners roundId=${roundId} count=${winners.length}`)
+  return winners
+}
+
+async function upsertWinners(roundId) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const winners = await fetchRoundWinners(roundId)
+  if (!winners || winners.length === 0) return
+  for (const w of winners) {
+    const row = mapWinner(roundId, w)
+    const { error } = await supabase
+      .from('lottery_winners')
+      .upsert([row], { onConflict: 'round_id,ticket_number,source_chain_id' })
+      .select()
+    if (error) {
+      try { console.error('lottery_winners upsert error', error.message) } catch {}
+    }
+    try { console.log(`[${new Date().toISOString()}] [lottery-sync] upsert winner round=${row.round_id} ticket=${row.ticket_number} source=${row.source_chain_id} amount=${row.prize_amount}`) } catch {}
+  }
+}
+
+function mapRound(r) {
+  return {
+    id: Number(r.id),
+    status: String(r.status),
+    ticket_price: String(r.ticketPrice),
+    total_tickets_sold: Number(r.totalTicketsSold),
+    prize_pool: String(r.prizePool),
+    created_at: toIsoSafe(r.createdAt),
+    closed_at: toIsoSafe(r.closedAt),
+  }
+}
+
+async function upsertRounds(rounds) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const payload = rounds.map(mapRound)
+  if (!payload.length) return
+  const { error } = await supabase.from('lottery_rounds').upsert(payload, { onConflict: 'id' })
+  if (error) throw error
+}
+
+async function handleEvent() {
+  const rounds = await fetchAllRounds()
+  await upsertRounds(rounds)
+  const target = latestTargetRound(rounds)
+  console.log(`[${new Date().toISOString()}] [lottery-sync] latest target round id=${target?.id} status=${target?.status}`)
+  if (target?.id != null) {
+    await upsertWinners(target.id)
+  }
+}
+
+function makeWs(url, chainId, onEvent) {
+  let ws
+  let attempts = 0
+  function connect() {
+    attempts += 1
+    ws = new WebSocket(url, 'graphql-transport-ws')
+    ws.onopen = () => {
+      attempts = 0
+      ws.send(JSON.stringify({ type: 'connection_init' }))
+    }
+    ws.onmessage = async (ev) => {
+      const msg = JSON.parse(ev.data)
+      try { console.log(`[${new Date().toISOString()}] [lottery-sync] WS message type=${msg.type} payload=${JSON.stringify(msg.payload)}`) } catch {}
+      if (msg.type === 'connection_ack') {
+        ws.send(JSON.stringify({ id: 'lottery_sync', type: 'subscribe', payload: { query: `subscription { notifications(chainId: "${chainId}") }` } }))
+      } else if (msg.type === 'next') {
+        onEvent()
+      }
+    }
+    ws.onclose = () => {
+      const delay = Math.min(1000 * Math.pow(2, attempts), 30000)
+      setTimeout(connect, delay)
+    }
+    ws.onerror = () => {}
+  }
+  connect()
+}
+
+async function main() {
+  await handleEvent()
+  const chainId = extractChainId(LOTTERY_HTTP)
+  const wsUrl = endpointToWsUrl(LOTTERY_HTTP)
+  makeWs(wsUrl, chainId, handleEvent)
+}
+
+main().catch(() => { process.exit(1) })

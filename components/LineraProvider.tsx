@@ -32,6 +32,7 @@ interface LineraContextType {
   application?: linera.Application; // Deprecated - use btcApplication or ethApplication
   btcApplication?: linera.Application;
   ethApplication?: linera.Application;
+  lotteryApplication?: linera.Application;
   accountOwner?: string;
   balance?: string;
   loading: boolean;
@@ -52,6 +53,7 @@ interface LineraContextType {
   btcNotifications?: string[];
   ethNotifications?: string[];
   connectWallet?: () => Promise<void>;
+  purchaseTickets?: (amountTokens: string) => Promise<void>;
 }
 
 const LineraContext = createContext<LineraContextType>({ 
@@ -224,6 +226,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net';
       const btcApplicationId = import.meta.env.VITE_BTC_APPLICATION_ID || 'btc_app_id_here';
       const ethApplicationId = import.meta.env.VITE_ETH_APPLICATION_ID || 'eth_app_id_here';
+      const lotteryApplicationId = import.meta.env.VITE_LOTTERY_APPLICATION_ID || '';
       let signer: any = new MetaMask();
       const faucet = new linera.Faucet(faucetUrl);
       const owner = await Promise.resolve(signer.address());
@@ -234,6 +237,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const clientInstance = await new linera.Client(wallet, signer, false);
       const btcApplication = await clientInstance.frontend().application(btcApplicationId);
       const ethApplication = await clientInstance.frontend().application(ethApplicationId);
+      const lotteryApplication = lotteryApplicationId ? await clientInstance.frontend().application(lotteryApplicationId) : undefined;
       const initialBalance = await queryBalance(btcApplication, owner);
       if (parseFloat(initialBalance) === 0) {
         try {
@@ -255,6 +259,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             application: btcApplication,
             btcApplication,
             ethApplication,
+            lotteryApplication,
             accountOwner: owner,
             balance: balanceAfterMint,
             loading: false,
@@ -269,6 +274,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             application: btcApplication,
             btcApplication,
             ethApplication,
+            lotteryApplication,
             accountOwner: owner,
             balance: initialBalance,
             loading: false,
@@ -284,6 +290,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           application: btcApplication,
           btcApplication,
           ethApplication,
+          lotteryApplication,
           accountOwner: owner,
           balance: initialBalance,
           loading: false,
@@ -298,6 +305,14 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         error: err as Error,
       }));
     }
+  };
+
+  const purchaseTickets = async (amountTokens: string) => {
+    if (!state.lotteryApplication || !state.accountOwner) return;
+    const chainId = import.meta.env.VITE_LOTTERY_CHAIN_ID || '';
+    const targetOwner = import.meta.env.VITE_LOTTERY_TARGET_OWNER || '';
+    const mutation = `mutation { transfer(owner: "${state.accountOwner}", amount: "${amountTokens}", targetAccount: { chainId: "${chainId}", owner: "${targetOwner}" }, purchaseTickets: true) }`;
+    await state.lotteryApplication.query(JSON.stringify({ query: mutation }));
   };
 
   // Окремий useEffect для налаштування subscription
@@ -449,6 +464,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     refreshBalance,
     refreshRounds,
     setActiveTab,
-    connectWallet
+    connectWallet,
+    purchaseTickets
   }}>{children}</LineraContext.Provider>;
 };
