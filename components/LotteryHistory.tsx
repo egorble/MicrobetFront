@@ -62,7 +62,9 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
             chartData = [...placeholders, ...chartData];
         }
 
-        const maxChartVal = Math.max(...chartData.map(d => d.val), 100); // Min scale 100
+        // Dynamic Scaling: Min 10, otherwise max value
+        const maxVal = Math.max(...chartData.map(d => d.val));
+        const maxChartVal = Math.max(maxVal, 10);
 
         // Generate Wavy SVG Path
         const points = chartData.map((d, i) => {
@@ -190,13 +192,13 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
 
                         {/* Chart Area */}
                         <div className="flex-1 relative">
-                            {/* Grid Lines */}
-                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10">
-                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
-                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
-                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
-                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
-                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                            {/* Grid Lines (Solid now, not dashed) */}
+                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                                <div className="w-full h-px bg-gray-100"></div>
+                                <div className="w-full h-px bg-gray-100"></div>
+                                <div className="w-full h-px bg-gray-100"></div>
+                                <div className="w-full h-px bg-gray-100"></div>
+                                <div className="w-full h-px bg-gray-100"></div>
                             </div>
 
                             {/* Wavy Chart SVG */}
@@ -232,7 +234,7 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
 
                                             {/* The Point Dot */}
                                             <div
-                                                className="w-2 h-2 bg-white border-[3px] border-red-600 rounded-full absolute transition-all duration-300 group-hover:scale-150 z-10"
+                                                className="w-2 h-2 bg-white border-[3px] border-red-600 rounded-full absolute transition-all duration-300 opacity-0 scale-0 group-hover:opacity-100 group-hover:scale-100 z-10"
                                                 style={{ top: `${y}%`, transform: 'translateY(-50%)' }}
                                             ></div>
 
