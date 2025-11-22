@@ -110,9 +110,9 @@ export function LotterySection() {
         };
     }, []);
 
-    // Reveal winners one by one every 10 seconds while drawing
+    // Reveal winners one by one every 2 seconds while drawing
     useEffect(() => {
-        const REVEAL_INTERVAL_MS = 10000;
+        const REVEAL_INTERVAL_MS = 2000;
         const timer = setInterval(() => {
             setRounds(current => current.map(r => {
                 const isDrawing = r.status === 'CLOSED' || r.status === 'DRAWING';
@@ -162,6 +162,7 @@ export function LotterySection() {
             const activeCandidate = mapped
                 .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
                 .sort((a, b) => Number(b.id) - Number(a.id))[0]
+
             let combined = (dbRoundsCache || []).map((r: any) => {
                 const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
                 const endMs = createdMs + 5 * 60 * 1000;
@@ -179,6 +180,7 @@ export function LotterySection() {
                     revealedWinners: revealed
                 } as LotteryRound
             })
+
             if (activeCandidate) {
                 console.log('[lottery-ui] activeCandidate', activeCandidate)
                 const idx = combined.findIndex(rr => rr.id === activeCandidate.id)
@@ -188,8 +190,23 @@ export function LotterySection() {
                     combined.unshift(activeCandidate)
                 }
             }
-            console.log('[lottery-ui] combined rounds:', combined.map(r => ({ id: r.id, status: r.status, endTime: r.endTime })))
-            setRounds(combined)
+
+            setRounds(current => {
+                const currentMap = new Map(current.map(r => [r.id, r]));
+                return combined.map(newRound => {
+                    const existing = currentMap.get(newRound.id);
+                    // Preserve revealedWinners if we are in a drawing state and the round ID matches
+                    if (existing && (existing.status === 'CLOSED' || existing.status === 'DRAWING') && newRound.status !== 'COMPLETE') {
+                        return {
+                            ...newRound,
+                            revealedWinners: existing.revealedWinners,
+                            // Also preserve winners if the new data doesn't have them yet (e.g. if GraphQL doesn't return winners but we have them from somewhere else, though here we rely on dbRoundsCache for winners mostly)
+                            winners: newRound.winners.length > 0 ? newRound.winners : existing.winners
+                        };
+                    }
+                    return newRound;
+                });
+            });
         };
         loadGraphQL();
     }, [lotteryApplication, dbRoundsCache]);

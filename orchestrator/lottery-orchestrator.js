@@ -1,7 +1,7 @@
 const axios = require('axios')
 const WebSocket = require('ws')
 
-const LOTTERY_HTTP = 'http://localhost:8081/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/c2dad20dd15958901615a149e3de7852ce369d8663230c3d8c938dbd509018ee'
+const LOTTERY_HTTP = 'http://localhost:8081/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/371ac1a268cc29a7f5e5fee3fda0baf58d9a7d75b6ea80e028bbc6ed647c0b77'
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
