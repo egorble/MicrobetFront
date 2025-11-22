@@ -3,7 +3,7 @@ import { LotteryHero } from "./LotteryHero";
 import { LotteryHistory } from "./LotteryHistory";
 import { supabaseLottery } from "../utils/supabaseClient";
 import { useLinera } from "./LineraProvider";
-import { parseTimestamp, formatLocalTime } from "../utils/timeUtils";
+import { parseTimestamp } from "../utils/timeUtils";
 
 export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
 
