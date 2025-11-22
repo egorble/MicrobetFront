@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Ticket, Clock, Trophy, Check, AlertCircle, ArrowRight } from "lucide-react";
-import { LotteryRound } from "./LotterySection";
+import { Ticket, Clock, Trophy, Check, AlertCircle, ArrowRight, Sparkles, Crown } from "lucide-react";
+import { LotteryRound, Winner } from "./LotterySection";
 import { LightningAnimation } from "./LightningAnimation";
 
 interface LotteryHeroProps {
@@ -57,6 +57,7 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
     };
 
     const isActive = round.status === "ACTIVE";
+    const isDrawing = round.status === "DRAWING";
     const isClosed = round.status === "CLOSED";
 
     return (
@@ -85,10 +86,15 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                         </span>
                                         Live Round #{round.id}
                                     </>
+                                ) : isDrawing ? (
+                                    <>
+                                        <Sparkles className="w-4 h-4 animate-spin-slow" />
+                                        Live Draw in Progress
+                                    </>
                                 ) : (
                                     <>
                                         <Clock className="w-4 h-4" />
-                                        Drawing Winner...
+                                        Round Closed
                                     </>
                                 )}
                             </div>
@@ -96,7 +102,13 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                 Win <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600">{round.prizePool} LNRA</span>
                             </h2>
                             <p className="text-gray-500 text-lg">
-                                Next draw in: <span className="font-mono font-bold text-gray-900">{timeLeft}</span>
+                                {isActive ? (
+                                    <>Next draw in: <span className="font-mono font-bold text-gray-900">{timeLeft}</span></>
+                                ) : isDrawing ? (
+                                    <span className="text-red-600 font-bold animate-pulse">Revealing Winners...</span>
+                                ) : (
+                                    "Preparing Draw..."
+                                )}
                             </p>
                         </div>
 
@@ -112,8 +124,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                         </div>
                     </div>
 
-                    {/* Right Side: Action Card */}
-                    <div className="w-full md:w-96 bg-white rounded-2xl shadow-lg border border-gray-100 p-6 relative z-10">
+                    {/* Right Side: Action Card or Live Draw */}
+                    <div className="w-full md:w-96 bg-white rounded-2xl shadow-lg border border-gray-100 p-6 relative z-10 min-h-[300px] flex flex-col justify-center">
                         {isActive ? (
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="text-center mb-4">
@@ -179,6 +191,53 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                     )}
                                 </button>
                             </form>
+                        ) : isDrawing ? (
+                            <div className="space-y-4">
+                                <div className="text-center mb-2">
+                                    <h3 className="text-xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-yellow-500" />
+                                        Live Draw
+                                    </h3>
+                                </div>
+
+                                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
+                                    {round.revealedWinners.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-400 animate-pulse">
+                                            Selecting winners...
+                                        </div>
+                                    ) : (
+                                        round.revealedWinners.slice().reverse().map((winner, index) => (
+                                            <div
+                                                key={winner.ticketId}
+                                                className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-500 flex items-center gap-3"
+                                            >
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${winner.rank === 1 ? "bg-yellow-100 text-yellow-700" :
+                                                        winner.rank === 2 ? "bg-gray-100 text-gray-700" :
+                                                            "bg-orange-100 text-orange-700"
+                                                    }`}>
+                                                    {winner.rank === 1 ? <Crown className="w-5 h-5" /> : <span className="font-bold">#{winner.rank}</span>}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-xs text-gray-500">Ticket #{winner.ticketId}</div>
+                                                    <div className="font-mono text-sm font-medium truncate" title={winner.owner}>
+                                                        {winner.owner.slice(0, 6)}...{winner.owner.slice(-4)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-xs text-gray-500">Won</div>
+                                                    <div className="font-bold text-green-600">{winner.amount}</div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+
+                                    {round.revealedWinners.length < round.winners.length && (
+                                        <div className="text-center py-2 text-sm text-gray-400 animate-pulse">
+                                            Revealing next winner...
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         ) : (
                             <div className="text-center py-8 space-y-4">
                                 <div className="w-20 h-20 mx-auto bg-amber-50 rounded-full flex items-center justify-center animate-pulse">

@@ -8,6 +8,8 @@
     "dev": "nodemon orchestrator.js",
     "lottery": "node lottery-orchestrator.js",
     "dev:lottery": "nodemon lottery-orchestrator.js",
+    "lottery:sync": "node supabase-sync-lottery.js",
+    "dev:lottery:sync": "nodemon supabase-sync-lottery.js",
     "test": "node -e \"console.log('Testing orchestrator...'); require('./orchestrator.js')\""
   },
   "dependencies": {
