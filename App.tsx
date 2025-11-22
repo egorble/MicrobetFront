@@ -252,7 +252,7 @@ function AppContent() {
     return () => {
       document.removeEventListener('wheel', handleWheel);
     };
-  }, []);
+  }, [gameMode]);
 
   return (
     <>
