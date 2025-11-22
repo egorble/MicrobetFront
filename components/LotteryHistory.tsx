@@ -1,5 +1,5 @@
 import { LotteryRound, Winner } from "./LotterySection";
-import { Trophy, Clock, Ticket, BarChart3, Users, Coins, ArrowUpRight } from "lucide-react";
+import { Trophy, Clock, Ticket, Activity, TrendingUp } from "lucide-react";
 import { formatLocalTime } from "../utils/timeUtils";
 import { useMemo } from "react";
 
@@ -9,23 +9,29 @@ interface LotteryHistoryProps {
 }
 
 export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
-    const feed = useMemo(() => {
+    const stats = useMemo(() => {
         const allWinners: { winner: Winner; roundId: string; time: number }[] = [];
+        const uniquePlayers = new Set<string>();
 
+        // Process Latest Winners
         if (latest) {
             latest.forEach(w => {
                 allWinners.push({ winner: w, roundId: 'Live', time: Date.now() });
+                uniquePlayers.add(w.owner);
             });
         }
 
+        // Process History Rounds
         rounds.forEach(r => {
             r.winners.forEach(w => {
                 allWinners.push({ winner: w, roundId: r.id, time: r.endTime });
+                uniquePlayers.add(w.owner);
             });
         });
 
+        // Sort Feed (Newest First)
         const seen = new Set();
-        const byTime = allWinners
+        const feed = allWinners
             .filter(item => {
                 const key = `${item.winner.ticketId}-${item.winner.owner}`;
                 if (seen.has(key)) return false;
@@ -35,127 +41,278 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
             .sort((a, b) => b.time - a.time)
             .slice(0, 100);
 
+        // Calculate Metrics
         const totalVolume = rounds.reduce((acc, r) => acc + parseFloat(r.prizePool), 0);
+        const totalWinners = feed.length;
+        const avgWin = totalWinners > 0 ? totalVolume / allWinners.length : 0;
 
-        return { recent: byTime, totalVolume };
+        // Chart Data (Last 12 Rounds)
+        let chartData = [...rounds]
+            .sort((a, b) => Number(a.id) - Number(b.id)) // Oldest to Newest
+            .slice(-12) // Last 12
+            .map(r => ({
+                id: r.id,
+                val: parseFloat(r.prizePool)
+            }));
+
+        // Fill with empty slots if less than 12 to keep chart stable
+        if (chartData.length < 12) {
+            const missing = 12 - chartData.length;
+            const placeholders = Array(missing).fill(0).map((_, i) => ({ id: `?`, val: 0 }));
+            chartData = [...placeholders, ...chartData];
+        }
+
+        const maxChartVal = Math.max(...chartData.map(d => d.val), 100); // Min scale 100
+
+        // Generate Wavy SVG Path
+        const points = chartData.map((d, i) => {
+            const x = (i / (chartData.length - 1)) * 100;
+            const y = 100 - (d.val / maxChartVal) * 80; // Keep some padding at top
+            return [x, y];
+        });
+
+        // Helper for Bezier control points
+        const line = (pointA: number[], pointB: number[]) => {
+            const lengthX = pointB[0] - pointA[0];
+            const lengthY = pointB[1] - pointA[1];
+            return {
+                length: Math.sqrt(Math.pow(lengthX, 2) + Math.pow(lengthY, 2)),
+                angle: Math.atan2(lengthY, lengthX)
+            };
+        };
+
+        const controlPoint = (current: number[], previous: number[], next: number[], reverse?: boolean) => {
+            const p = previous || current;
+            const n = next || current;
+            const smoothing = 0.2;
+            const o = line(p, n);
+            const angle = o.angle + (reverse ? Math.PI : 0);
+            const length = o.length * smoothing;
+            const x = current[0] + Math.cos(angle) * length;
+            const y = current[1] + Math.sin(angle) * length;
+            return [x, y];
+        };
+
+        // Simple smoothing function for Bezier curves
+        const svgPath = points.length > 1 ? points.reduce((acc, point, i, a) => {
+            if (i === 0) return `M ${point[0]},${point[1]}`;
+            const cps = controlPoint(a[i - 1], a[i - 2], point);
+            const cpe = controlPoint(point, a[i - 1], a[i + 1], true);
+            return `${acc} C ${cps[0]},${cps[1]} ${cpe[0]},${cpe[1]} ${point[0]},${point[1]}`;
+        }, "") : "";
+
+        const fillPath = `${svgPath} L 100,100 L 0,100 Z`;
+
+        return {
+            feed,
+            totalVolume,
+            uniqueCount: uniquePlayers.size,
+            avgWin,
+            chartData,
+            maxChartVal,
+            svgPath,
+            fillPath
+        };
     }, [rounds, latest]);
 
     return (
         <div className="space-y-8">
-            {/* Premium Stats Bar */}
-            <div className="bg-black rounded-3xl p-1 shadow-2xl shadow-gray-200/50">
-                <div className="bg-gray-900/50 rounded-[20px] p-6 grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-800">
-                    <div className="flex items-center gap-5 px-4">
-                        <div className="w-14 h-14 rounded-2xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-900/20">
-                            <BarChart3 className="w-7 h-7" />
+            {/* Analytics Dashboard */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Key Metrics Card */}
+                <div className="bg-black text-white rounded-3xl p-8 shadow-2xl flex flex-col justify-between relative overflow-hidden min-h-[300px]">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-red-600 rounded-full blur-[100px] opacity-20 -mr-16 -mt-16 pointer-events-none"></div>
+
+                    <div>
+                        <div className="flex items-center gap-3 mb-6 opacity-75">
+                            <Activity className="w-5 h-5 text-red-500" />
+                            <span className="text-sm font-bold tracking-widest uppercase">Platform Analytics</span>
                         </div>
-                        <div>
-                            <div className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Total Rounds</div>
-                            <div className="text-3xl font-black text-white tracking-tight">{rounds.length}</div>
+
+                        <div className="space-y-8 relative z-10">
+                            <div>
+                                <div className="text-4xl font-black tracking-tight mb-1">
+                                    {stats.totalVolume.toFixed(0)} <span className="text-red-500">LNRA</span>
+                                </div>
+                                <div className="text-sm text-gray-400 font-medium">Total Prize Volume Distributed</div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-8">
+                                <div>
+                                    <div className="text-2xl font-bold text-white">{stats.uniqueCount}</div>
+                                    <div className="text-xs text-gray-500 uppercase font-bold mt-1">Unique Players</div>
+                                </div>
+                                <div>
+                                    <div className="text-2xl font-bold text-white">~{stats.avgWin.toFixed(1)}</div>
+                                    <div className="text-xs text-gray-500 uppercase font-bold mt-1">Avg. Win Size</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-5 px-4 pt-6 md:pt-0">
-                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-white">
-                            <Users className="w-7 h-7" />
+                    <div className="mt-8 pt-6 border-t border-white/10 flex items-center justify-between text-xs font-medium text-gray-400">
+                        <span>Updated Realtime</span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                            Live
                         </div>
+                    </div>
+                </div>
+
+                {/* Trend Chart Card */}
+                <div className="lg:col-span-2 bg-white border border-gray-200 rounded-3xl p-8 shadow-sm flex flex-col min-h-[300px] relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-8 relative z-10">
                         <div>
-                            <div className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Total Winners</div>
-                            <div className="text-3xl font-black text-white tracking-tight">{feed.recent.length}</div>
+                            <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                                <TrendingUp className="w-6 h-6 text-red-600" />
+                                Prize Pool Trend
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">Volume history of the last 12 rounds</p>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Last Round</div>
+                            <div className="text-xl font-black text-gray-900">
+                                {stats.chartData[stats.chartData.length - 1]?.val || 0} LNRA
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-5 px-4 pt-6 md:pt-0">
-                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-white">
-                            <Coins className="w-7 h-7" />
+                    <div className="flex-1 w-full relative h-40 flex gap-4">
+                        {/* Y-Axis Labels */}
+                        <div className="flex flex-col justify-between text-[10px] font-bold text-gray-400 py-2 text-right min-w-[40px]">
+                            <div>{Math.round(stats.maxChartVal)}</div>
+                            <div>{Math.round(stats.maxChartVal * 0.75)}</div>
+                            <div>{Math.round(stats.maxChartVal * 0.5)}</div>
+                            <div>{Math.round(stats.maxChartVal * 0.25)}</div>
+                            <div>0</div>
                         </div>
-                        <div>
-                            <div className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Total Distributed</div>
-                            <div className="text-3xl font-black text-white tracking-tight">
-                                {feed.totalVolume.toLocaleString()} <span className="text-lg font-bold text-red-500">LNRA</span>
+
+                        {/* Chart Area */}
+                        <div className="flex-1 relative">
+                            {/* Grid Lines */}
+                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10">
+                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                                <div className="w-full h-px bg-black border-t border-dashed border-gray-400"></div>
+                            </div>
+
+                            {/* Wavy Chart SVG */}
+                            <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#DC2626" stopOpacity="0.2" />
+                                        <stop offset="100%" stopColor="#DC2626" stopOpacity="0" />
+                                    </linearGradient>
+                                </defs>
+                                <path d={stats.fillPath} fill="url(#chartGradient)" />
+                                <path d={stats.svgPath} fill="none" stroke="#DC2626" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                            </svg>
+
+                            {/* HTML Data Points & Tooltips (Overlay) */}
+                            <div className="absolute inset-0">
+                                {stats.chartData.map((d, i) => {
+                                    const x = (i / (stats.chartData.length - 1)) * 100;
+                                    const y = 100 - (d.val / stats.maxChartVal) * 80; // Match SVG calculation
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="absolute w-4 h-full group flex items-end justify-center hover:z-20"
+                                            style={{
+                                                left: `${x}%`,
+                                                top: 0,
+                                                transform: 'translateX(-50%)' // Center on the point
+                                            }}
+                                        >
+                                            {/* Hover Trigger Area (Full Height) */}
+                                            <div className="w-full h-full absolute inset-0 cursor-crosshair"></div>
+
+                                            {/* The Point Dot */}
+                                            <div
+                                                className="w-2 h-2 bg-white border-[3px] border-red-600 rounded-full absolute transition-all duration-300 group-hover:scale-150 z-10"
+                                                style={{ top: `${y}%`, transform: 'translateY(-50%)' }}
+                                            ></div>
+
+                                            {/* Tooltip */}
+                                            {d.id !== '?' && (
+                                                <div
+                                                    className="absolute bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-lg"
+                                                    style={{ top: `${y}%`, transform: 'translateY(-150%)' }}
+                                                >
+                                                    {d.val} LNRA
+                                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-black rotate-45"></div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Live Feed */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 overflow-hidden flex flex-col h-[700px]">
-                <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
-                    <div>
-                        <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
-                            <Clock className="w-6 h-6 text-red-600" />
-                            Live Winners Feed
-                        </h3>
-                        <p className="text-sm text-gray-400 font-medium mt-1">Real-time lottery results</p>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-full border border-red-100">
-                        <span className="relative flex h-2.5 w-2.5">
+            {/* Full Width Live Feed */}
+            <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                <div className="px-8 py-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                    <h3 className="text-lg font-black text-gray-900 flex items-center gap-3">
+                        <Clock className="w-5 h-5 text-red-600" />
+                        Live Winners Feed
+                    </h3>
+                    <div className="flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-xs font-bold uppercase tracking-wide border border-red-100">
+                        <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                         </span>
-                        <span className="text-xs font-bold text-red-700 tracking-wide">LIVE</span>
+                        Realtime Stream
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
-                    {feed.recent.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-300 space-y-4">
-                            <Trophy className="w-16 h-16 opacity-20" />
-                            <p className="font-medium">Waiting for the first winner...</p>
-                        </div>
-                    ) : (
-                        feed.recent.map((item, idx) => (
-                            <div
-                                key={`${item.winner.ticketId}-${idx}`}
-                                className="group relative bg-white rounded-2xl p-5 border border-gray-100 hover:border-red-100 hover:shadow-lg hover:shadow-red-500/5 transition-all duration-300"
-                            >
-                                <div className="flex items-center gap-5">
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg transition-colors ${idx === 0 ? 'bg-red-600 text-white shadow-md shadow-red-200' : 'bg-gray-50 text-gray-400 group-hover:bg-red-50 group-hover:text-red-600'
-                                        }`}>
-                                        <Trophy className="w-6 h-6" />
+                <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {stats.feed.length === 0 ? (
+                            <div className="col-span-full py-12 flex flex-col items-center justify-center text-gray-400 space-y-4">
+                                <Trophy className="w-16 h-16 opacity-10" />
+                                <p className="font-medium">Waiting for the first winner...</p>
+                            </div>
+                        ) : (
+                            stats.feed.map((item, idx) => (
+                                <div key={`${item.winner.ticketId}-${idx}`} className="group bg-white border border-gray-100 rounded-2xl p-4 hover:border-red-600 hover:shadow-md transition-all duration-300 flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center font-black text-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
+                                        <Trophy className="w-5 h-5" />
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between mb-1">
-                                            <div className="flex items-center gap-3">
-                                                <span className="font-black text-gray-900 text-xl tracking-tight">
-                                                    {item.winner.amount} <span className="text-sm text-gray-400 font-bold">LNRA</span>
-                                                </span>
-                                                {item.roundId !== 'Live' && (
-                                                    <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-bold uppercase tracking-wider">
-                                                        Round #{item.roundId}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-xs font-medium text-gray-400 flex items-center gap-1">
-                                                {item.roundId === 'Live' ? 'Just now' : formatLocalTime(item.time)}
-                                                {idx === 0 && <span className="flex h-2 w-2 rounded-full bg-red-500 ml-1"></span>}
-                                            </div>
+                                            <span className="font-black text-gray-900 text-lg">{item.winner.amount} LNRA</span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                                {item.roundId === 'Live' ? 'Just Now' : formatLocalTime(item.time)}
+                                            </span>
                                         </div>
-
-                                        <div className="flex items-center gap-4 text-sm text-gray-500">
-                                            <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-                                                <Users className="w-3.5 h-3.5 text-gray-400" />
-                                                <span className="font-mono text-xs font-medium text-gray-600">
-                                                    {item.winner.owner.slice(0, 6)}...{item.winner.owner.slice(-4)}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-                                                <Ticket className="w-3.5 h-3.5" />
-                                                <span>Ticket #{item.winner.ticketId}</span>
-                                            </div>
+                                        <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
+                                            <span className="font-mono text-gray-400">
+                                                {item.winner.owner.slice(0, 6)}...{item.winner.owner.slice(-4)}
+                                            </span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span className="flex items-center gap-1">
+                                                <Ticket className="w-3 h-3" /> #{item.winner.ticketId}
+                                            </span>
                                         </div>
-                                    </div>
-
-                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute right-5 top-1/2 -translate-y-1/2">
-                                        <ArrowUpRight className="w-5 h-5 text-red-400" />
                                     </div>
                                 </div>
-                            </div>
-                        ))
-                    )}
+                            ))
+                        )}
+                    </div>
                 </div>
+
+                {stats.feed.length > 0 && (
+                    <div className="px-8 py-4 bg-gray-50 border-t border-gray-100 text-center text-xs font-medium text-gray-400">
+                        Showing last {stats.feed.length} winners
+                    </div>
+                )}
             </div>
         </div>
     );
