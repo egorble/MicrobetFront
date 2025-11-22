@@ -1,10 +1,15 @@
-import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus, Ticket } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
 import { useState, useEffect, useRef } from "react";
 import { getUserTimezone, formatLocalTime } from "../utils/timeUtils";
 
-export function Header() {
+interface HeaderProps {
+  gameMode: 'prediction' | 'lottery';
+  setGameMode: (mode: 'prediction' | 'lottery') => void;
+}
+
+export function Header({ gameMode, setGameMode }: HeaderProps) {
   const {
     balance,
     loading,
@@ -181,7 +186,34 @@ export function Header() {
             <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-lg">
               <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
             </div>
-            <h1 className="text-lg sm:text-2xl font-bold text-gray-800">MicroBet</h1>
+            <div className="hidden sm:block">
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-800">MicroBet</h1>
+            </div>
+
+            {/* Game Mode Switcher */}
+            <div className="flex bg-gray-100 p-1 rounded-lg ml-2">
+              <button
+                onClick={() => setGameMode('prediction')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'prediction'
+                    ? 'bg-white shadow-sm text-gray-900'
+                    : 'text-gray-500 hover:text-gray-900'
+                  }`}
+              >
+                <TrendingUp className="w-3 h-3" />
+                <span className="hidden sm:inline">Prediction</span>
+              </button>
+              <button
+                onClick={() => setGameMode('lottery')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'lottery'
+                    ? 'bg-white shadow-sm text-purple-700'
+                    : 'text-gray-500 hover:text-gray-900'
+                  }`}
+              >
+                <Ticket className="w-3 h-3" />
+                <span className="hidden sm:inline">Lottery</span>
+                <span className="sm:hidden">Lotto</span>
+              </button>
+            </div>
           </div>
 
           {/* Right side - Actions and Wallet */}
@@ -198,10 +230,6 @@ export function Header() {
                 </div>
               </div>
             </div>
-
-            {/* WebSocket Status - REMOVED */}
-
-            {/* Subscription Status - REMOVED */}
 
             {/* Connect Wallet Button (shown when not connected) */}
             {!connected && (

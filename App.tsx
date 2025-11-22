@@ -2,6 +2,7 @@ import { Header } from "./components/Header";
 import { GameCard } from "./components/GameCard";
 import { ChartTabs } from "./components/ChartTabs";
 import { LineraProvider, useLinera } from "./components/LineraProvider";
+import { LotterySection } from "./components/LotterySection";
 import { MobileInstallPrompt } from "./components/MobileInstallPrompt";
 import { MobileOrientationHandler } from "./components/MobileOrientationHandler";
 import { MobileSplashScreen } from "./components/MobileSplashScreen";
@@ -33,6 +34,7 @@ function AppContent() {
   const [timeLeft, setTimeLeft] = useState<string>('00:00');
   const [showSplash, setShowSplash] = useState(mobile.isMobile);
   const [appReady, setAppReady] = useState(false);
+  const [gameMode, setGameMode] = useState<'prediction' | 'lottery'>('prediction');
 
   // Отримуємо активні rounds в залежності від вибраної вкладки
   const activeRounds = activeTab === 'btc' ? btcRounds : ethRounds;
@@ -261,77 +263,88 @@ function AppContent() {
       />
 
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Header />
+        <Header gameMode={gameMode} setGameMode={setGameMode} />
 
-        {/* Token Selection Buttons */}
-        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex flex-col gap-3 sm:gap-4">
-            {/* Token buttons and timer in mobile layout */}
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
-              <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0 -mx-1 px-1">
-                <button
-                  onClick={() => setActiveTab?.('btc')}
-                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'btc'
-                    ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                >
-                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <div className="text-left">
-                    <div className="font-semibold text-sm sm:text-base">${tokenPrices.BTC}</div>
-                    <div className="text-xs sm:text-sm opacity-75">BTC/USD</div>
+        {gameMode === 'prediction' ? (
+          <>
+            {/* Token Selection Buttons */}
+            <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
+              <div className="flex flex-col gap-3 sm:gap-4">
+                {/* Token buttons and timer in mobile layout */}
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4">
+                  <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0 -mx-1 px-1">
+                    <button
+                      onClick={() => setActiveTab?.('btc')}
+                      className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'btc'
+                        ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                        }`}
+                    >
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <div className="text-left">
+                        <div className="font-semibold text-sm sm:text-base">${tokenPrices.BTC}</div>
+                        <div className="text-xs sm:text-sm opacity-75">BTC/USD</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab?.('eth')}
+                      className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'eth'
+                        ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                        }`}
+                    >
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <div className="text-left">
+                        <div className="font-semibold text-sm sm:text-base">${tokenPrices.ETH}</div>
+                        <div className="text-xs sm:text-sm opacity-75">ETH/USD</div>
+                      </div>
+                    </button>
                   </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab?.('eth')}
-                  className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'eth'
-                    ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                >
-                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <div className="text-left">
-                    <div className="font-semibold text-sm sm:text-base">${tokenPrices.ETH}</div>
-                    <div className="text-xs sm:text-sm opacity-75">ETH/USD</div>
+
+                  {/* Timer */}
+                  <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-3 bg-white rounded-full border border-gray-200 shadow-sm">
+                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+                    <span className="text-gray-800 text-base sm:text-base font-medium">{timeLeft}</span>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">5m</span>
                   </div>
-                </button>
-              </div>
-
-              {/* Timer */}
-              <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-3 bg-white rounded-full border border-gray-200 shadow-sm">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-                <span className="text-gray-800 text-base sm:text-base font-medium">{timeLeft}</span>
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">5m</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
-          {/* Game Cards Horizontal Scroll */}
-          <div className="mb-6 sm:mb-8">
-            <div
-              id="cards-container"
-              className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 snap-x snap-mandatory -mx-3 px-3 sm:mx-0 sm:px-0 cards-container"
-              style={{
-                scrollBehavior: 'smooth',
-                msOverflowStyle: 'none',
-                scrollbarWidth: 'none'
-              } as React.CSSProperties}
-            >
-              {allGames.map((game, index) => (
-                <div key={index} className="flex-shrink-0 w-64 sm:w-72 lg:w-80 snap-center">
-                  <GameCard
-                    game={game}
-                    currentPrice={tokenPrices[selectedToken] || undefined}
-                    gameType={selectedToken as 'BTC' | 'ETH'}
-                  />
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-          <ChartTabs selectedToken={selectedToken} />
-        </main>
+
+            <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
+              {/* Game Cards Horizontal Scroll */}
+              <div className="mb-6 sm:mb-8">
+                <div
+                  id="cards-container"
+                  className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 snap-x snap-mandatory -mx-3 px-3 sm:mx-0 sm:px-0 cards-container"
+                  style={{
+                    scrollBehavior: 'smooth',
+                    msOverflowStyle: 'none',
+                    scrollbarWidth: 'none'
+                  } as React.CSSProperties}
+                >
+                  {allGames.map((game, index) => (
+                    <div key={index} className="flex-shrink-0 w-64 sm:w-72 lg:w-80 snap-center">
+                      <GameCard
+                        game={game}
+                        currentPrice={tokenPrices[selectedToken] || undefined}
+                        gameType={selectedToken as 'BTC' | 'ETH'}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ChartTabs selectedToken={selectedToken} />
+            </main>
+          </>
+        ) : (
+          <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
+            <div className="mb-6 sm:mb-8">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4 px-1">Lottery Rounds</h2>
+              <LotterySection />
+            </div>
+          </main>
+        )}
 
         {/* Mobile Install Prompt */}
         <MobileInstallPrompt />
