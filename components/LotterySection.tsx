@@ -3,7 +3,7 @@ import { LotteryHero } from "./LotteryHero";
 import { LotteryHistory } from "./LotteryHistory";
 import { supabaseLottery } from "../utils/supabaseClient";
 import { useLinera } from "./LineraProvider";
-import { parseTimestamp } from "../utils/timeUtils";
+import { parseTimestamp, formatLocalTime } from "../utils/timeUtils";
 
 export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
 
@@ -20,7 +20,6 @@ export interface LotteryRound {
     ticketPrice: string;
     endTime: number; // timestamp
     winners: Winner[]; // All generated winners
-    revealedWinners: Winner[]; // Winners currently visible
     ticketsSold: number;
 }
 
@@ -37,10 +36,11 @@ export function LotterySection() {
 
     useEffect(() => {
         const load = async () => {
+            // Fetch rounds descending (newest first)
             const { data: dbRounds } = await supabaseLottery
                 .from('lottery_rounds')
                 .select('*')
-                .order('id', { ascending: true })
+                .order('id', { ascending: false }) // CHANGED: Fetch newest first
                 .limit(50);
 
             const { data: latestWinners } = await supabaseLottery
@@ -62,16 +62,27 @@ export function LotterySection() {
 
             setDbRoundsCache(dbRounds || [])
             const mapped: LotteryRound[] = (dbRounds || []).map((r: any) => {
-                console.log('[lottery-ui] raw created_at:', r.created_at, 'id:', r.id);
+                // Log keys to find end_time
+                if (r.id === '5' || r.id === 5) {
+                    console.log('[Lottery Sync] Round 5 Data:', JSON.stringify(r));
+                }
+
                 const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
-                const endMs = createdMs + 5 * 60 * 1000;
-                console.log('[lottery-ui] parsed created_ms:', createdMs, 'end_ms:', endMs, 'now:', Date.now());
+
+                // Try to find a valid end time from DB, otherwise fallback to 5 mins
+                // Checking common names: end_time, closed_at, scheduled_at
+                const dbEndTime = r.end_time || r.closed_at || r.scheduled_end_time;
+                const endMs = dbEndTime ? (toMs(dbEndTime) ?? (createdMs + 5 * 60 * 1000)) : (createdMs + 5 * 60 * 1000);
+
                 const winners = winnersByRound.get(Number(r.id)) || [];
                 let statusUpper = String(r.status).toUpperCase() as LotteryStatus;
-                if (statusUpper === 'ACTIVE' && endMs <= Date.now()) {
-                    statusUpper = 'CLOSED';
-                }
-                const revealed = statusUpper === 'COMPLETE' ? winners : [];
+
+                // REMOVED: Client-side status override. Trust the DB status.
+                // if (statusUpper === 'ACTIVE' && endMs <= Date.now()) {
+                //    statusUpper = 'CLOSED';
+                // }
+
+                // const revealed = statusUpper === 'COMPLETE' ? winners : [];
                 return {
                     id: String(r.id),
                     status: statusUpper,
@@ -80,9 +91,14 @@ export function LotterySection() {
                     endTime: endMs,
                     ticketsSold: Number(r.total_tickets_sold || 0),
                     winners,
-                    revealedWinners: revealed
                 };
             });
+
+            // Log latest round from DB for debugging
+            if (mapped.length > 0) {
+                const latest = mapped[0];
+                console.log(`[Lottery Sync] Latest DB Round: ID=${latest.id}, Status=${latest.status}, EndTime=${formatLocalTime(latest.endTime)} (Local)`);
+            }
 
             setRounds(mapped);
 
@@ -110,24 +126,9 @@ export function LotterySection() {
         };
     }, []);
 
-    // Reveal winners one by one every 2 seconds while drawing
-    useEffect(() => {
-        const REVEAL_INTERVAL_MS = 2000;
-        const timer = setInterval(() => {
-            setRounds(current => current.map(r => {
-                const isDrawing = r.status === 'CLOSED' || r.status === 'DRAWING';
-                if (!isDrawing) return r;
-                const have = r.revealedWinners.length;
-                const total = r.winners.length;
-                if (have < total) {
-                    const next = r.winners[have];
-                    return { ...r, revealedWinners: [...r.revealedWinners, next] };
-                }
-                return r;
-            }))
-        }, REVEAL_INTERVAL_MS);
-        return () => clearInterval(timer);
-    }, [rounds.length]);
+    // Reveal winners one by one every 10 seconds while drawing
+    // Reveal logic moved to LotteryHero
+    // useEffect(() => { ... }, [rounds.length]);
 
     useEffect(() => {
         const loadGraphQL = async () => {
@@ -139,10 +140,8 @@ export function LotterySection() {
             const parsed = typeof res === 'string' ? JSON.parse(res) : res;
             const list = parsed?.data?.allRounds || [];
             const mapped: LotteryRound[] = list.map((r: any) => {
-                console.log('[lottery-ui] gql createdAt:', r.createdAt, 'id:', r.id);
                 const createdMs = r.createdAt ? (toMs(r.createdAt) ?? Date.now()) : Date.now();
                 const endMs = createdMs + 5 * 60 * 1000;
-                console.log('[lottery-ui] gql parsed created_ms:', createdMs, 'end_ms:', endMs);
                 return {
                     id: String(r.id),
                     status: ((): LotteryStatus => {
@@ -155,10 +154,11 @@ export function LotterySection() {
                     endTime: endMs,
                     ticketsSold: Number(r.totalTicketsSold || 0),
                     winners: [],
-                    revealedWinners: []
                 };
             });
+
             // Prefer latest non-COMPLETE as active
+            // Since we fetch all, sort descending by ID
             const activeCandidate = mapped
                 .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
                 .sort((a, b) => Number(b.id) - Number(a.id))[0]
@@ -168,7 +168,7 @@ export function LotterySection() {
                 const endMs = createdMs + 5 * 60 * 1000;
                 const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
                 const winners: Winner[] = []
-                const revealed = statusUpper === 'COMPLETE' ? winners : [];
+                // const revealed = statusUpper === 'COMPLETE' ? winners : [];
                 return {
                     id: String(r.id),
                     status: statusUpper,
@@ -177,12 +177,11 @@ export function LotterySection() {
                     endTime: endMs,
                     ticketsSold: Number(r.total_tickets_sold || 0),
                     winners,
-                    revealedWinners: revealed
                 } as LotteryRound
             })
 
             if (activeCandidate) {
-                console.log('[lottery-ui] activeCandidate', activeCandidate)
+                console.log('[Lottery Sync] GraphQL Active Candidate:', activeCandidate.id, activeCandidate.status);
                 const idx = combined.findIndex(rr => rr.id === activeCandidate.id)
                 if (idx >= 0) {
                     combined[idx] = { ...combined[idx], ...activeCandidate }
@@ -191,22 +190,10 @@ export function LotterySection() {
                 }
             }
 
-            setRounds(current => {
-                const currentMap = new Map(current.map(r => [r.id, r]));
-                return combined.map(newRound => {
-                    const existing = currentMap.get(newRound.id);
-                    // Preserve revealedWinners if we are in a drawing state and the round ID matches
-                    if (existing && (existing.status === 'CLOSED' || existing.status === 'DRAWING') && newRound.status !== 'COMPLETE') {
-                        return {
-                            ...newRound,
-                            revealedWinners: existing.revealedWinners,
-                            // Also preserve winners if the new data doesn't have them yet (e.g. if GraphQL doesn't return winners but we have them from somewhere else, though here we rely on dbRoundsCache for winners mostly)
-                            winners: newRound.winners.length > 0 ? newRound.winners : existing.winners
-                        };
-                    }
-                    return newRound;
-                });
-            });
+            // Ensure combined list is sorted descending by ID
+            combined.sort((a, b) => Number(b.id) - Number(a.id));
+
+            setRounds(combined)
         };
         loadGraphQL();
     }, [lotteryApplication, dbRoundsCache]);

@@ -23,8 +23,8 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                     <div className="p-4 sm:p-6">
                         {latest && latest.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {latest.map((winner) => (
-                                    <div key={`${winner.ticketId}-${winner.owner}`} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-red-200 transition-colors">
+                                {latest.map((winner, idx) => (
+                                    <div key={`${winner.ticketId}-${winner.owner}-${idx}`} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-red-200 transition-colors">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center text-xs font-bold">
                                                 <Trophy className="w-4 h-4" />

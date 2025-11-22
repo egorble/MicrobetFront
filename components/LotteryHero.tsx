@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Ticket, Clock, Sparkles, Check, AlertCircle, ArrowRight } from "lucide-react";
 import { LotteryRound } from "./LotterySection";
 import { LightningAnimation } from "./LightningAnimation";
+import { formatLocalTime } from "../utils/timeUtils";
 
 interface LotteryHeroProps {
     round: LotteryRound;
@@ -23,6 +24,11 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
             const now = Date.now();
             const diff = round.endTime - now;
 
+            // Log timer details for debugging (using Local Time)
+            if (Math.floor(now / 1000) % 5 === 0) { // Log every ~5 seconds
+                console.log(`[Lottery Timer] Round ${round.id}: Now=${formatLocalTime(now)} (Local), End=${formatLocalTime(round.endTime)} (Local), Diff=${diff}ms`);
+            }
+
             if (diff <= 0) {
                 setTimeLeft('00:00');
                 return;
@@ -36,14 +42,60 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
         updateTimer();
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [round.endTime]);
+    }, [round.endTime, round.id]);
+
+    const [displayedWinners, setDisplayedWinners] = useState<any[]>([]);
+    const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Reset displayed winners when round changes
+    useEffect(() => {
+        setDisplayedWinners([]);
+    }, [round.id]);
+
+    // Handle reveal animation locally
+    useEffect(() => {
+        const isDrawing = round.status === 'DRAWING' || round.status === 'CLOSED';
+        if (!isDrawing) {
+            setDisplayedWinners([]);
+            return;
+        }
+
+        // If we already have all winners displayed, stop
+        if (displayedWinners.length >= round.winners.length) {
+            return;
+        }
+
+        // Start revealing if not already started
+        if (!revealTimerRef.current) {
+            revealTimerRef.current = setInterval(() => {
+                setDisplayedWinners(current => {
+                    if (current.length >= round.winners.length) {
+                        if (revealTimerRef.current) {
+                            clearInterval(revealTimerRef.current);
+                            revealTimerRef.current = null;
+                        }
+                        return current;
+                    }
+                    const nextIndex = current.length;
+                    return [...current, round.winners[nextIndex]];
+                });
+            }, 2000); // Reveal every 2 seconds
+        }
+
+        return () => {
+            if (revealTimerRef.current) {
+                clearInterval(revealTimerRef.current);
+                revealTimerRef.current = null;
+            }
+        };
+    }, [round.status, round.winners, displayedWinners.length]);
 
     // Auto-scroll to bottom of winner list
     useEffect(() => {
-        if (round.status === "DRAWING" && scrollRef.current) {
+        if ((round.status === "DRAWING" || round.status === "CLOSED") && scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [round.revealedWinners.length, round.status]);
+    }, [displayedWinners.length, round.status]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -65,7 +117,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
         }, 1500);
     };
 
-    const isActive = round.status === "ACTIVE" && (round.endTime - Date.now() > 0);
+    // Trust the backend status. If it says ACTIVE, it is active, even if our local timer thinks it's over.
+    const isActive = round.status === "ACTIVE";
     const isDrawing = round.status === "DRAWING" || round.status === "CLOSED";
 
     return (
@@ -196,14 +249,14 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                     ref={scrollRef}
                                     className="space-y-3 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin scroll-smooth"
                                 >
-                                    {round.revealedWinners.length === 0 ? (
+                                    {displayedWinners.length === 0 ? (
                                         <div className="text-center py-8 text-gray-400 animate-pulse">
                                             Selecting winners...
                                         </div>
                                     ) : (
-                                        round.revealedWinners.map((winner, index) => (
+                                        displayedWinners.map((winner, index) => (
                                             <div
-                                                key={winner.ticketId}
+                                                key={`${winner.ticketId}-${index}`}
                                                 className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm animate-in slide-in-from-bottom-4 fade-in duration-300 flex items-center gap-3"
                                             >
                                                 <div className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">
@@ -223,7 +276,7 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                         ))
                                     )}
 
-                                    {round.revealedWinners.length < round.winners.length && (
+                                    {displayedWinners.length < round.winners.length && (
                                         <div className="text-center py-2 text-sm text-gray-400 animate-pulse">
                                             Revealing next winner...
                                         </div>
