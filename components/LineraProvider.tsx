@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import * as linera from '@linera/client';
 import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
@@ -46,6 +46,17 @@ export interface LotteryRound {
   ticketsSold: number;
 }
 
+export interface NotificationItem {
+  id: string;
+  message: string;
+  timestamp: number;
+  read: boolean;
+  type: 'win';
+  amount: string;
+  roundId: string;
+  ticketId: string;
+}
+
 interface LineraContextType {
   client?: linera.Client;
   wallet?: linera.Wallet;
@@ -61,7 +72,7 @@ interface LineraContextType {
   error?: Error;
   refreshBalance?: () => Promise<void>;
   subscriptionStatus?: string;
-  notifications?: string[];
+  notifications: NotificationItem[];
   // New fields for multi-chain support
   activeTab?: 'btc' | 'eth';
   btcRounds?: Round[];
@@ -79,11 +90,13 @@ interface LineraContextType {
   ethNotifications?: string[];
   connectWallet?: () => Promise<void>;
   purchaseTickets?: (amountTokens: string) => Promise<void>;
+  markAllAsRead?: () => void;
 }
 
 const LineraContext = createContext<LineraContextType>({
   loading: false,
-  status: 'Not Connected'
+  status: 'Not Connected',
+  notifications: []
 });
 
 export const useLinera = () => useContext(LineraContext);
@@ -112,6 +125,31 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
   const notifiedWinsRef = useRef<Set<string>>(new Set()); // Track notified wins
+
+  // Load notifications from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('lottery_notifications');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setState(prev => ({ ...prev, notifications: parsed }));
+      } catch (e) {
+        console.error("Failed to parse notifications", e);
+      }
+    }
+  }, []);
+
+  // Save notifications to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('lottery_notifications', JSON.stringify(state.notifications));
+  }, [state.notifications]);
+
+  const markAllAsRead = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => ({ ...n, read: true }))
+    }));
+  }, []);
 
   const toMs = (v: any): number | null => {
     try { return parseTimestamp(v) } catch { return null }
@@ -314,12 +352,21 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         const winKey = `win-${uniqueKey}`;
         if (!notifiedWinsRef.current.has(winKey)) {
           notifiedWinsRef.current.add(winKey);
-          const timestamp = new Date().toLocaleTimeString();
-          const notificationText = `[${timestamp}] 🎉 You won ${winnerObj.amount} LNRA in Round #${winnerObj.roundId}! (Ticket #${winnerObj.ticketId})`;
+
+          const newNotification: NotificationItem = {
+            id: crypto.randomUUID(),
+            message: `You won ${winnerObj.amount} LNRA in Round #${winnerObj.roundId}!`,
+            timestamp: Date.now(),
+            read: false,
+            type: 'win',
+            amount: winnerObj.amount,
+            roundId: winnerObj.roundId,
+            ticketId: winnerObj.ticketId
+          };
 
           setState(prev => ({
             ...prev,
-            notifications: [...(prev.notifications || []), notificationText].slice(-5)
+            notifications: [newNotification, ...prev.notifications].slice(0, 50)
           }));
         }
       }
@@ -565,15 +612,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 });
               }
             }
-
-            // Add notification to the list for display
-            // const timestamp = new Date().toLocaleTimeString();
-            // const notificationText = `[${timestamp}] ${notification.reason?.NewBlock ? 'New Block' : 'Chain notification'}: ${JSON.stringify(notification)}`;
-
-            // setState(prev => ({
-            //   ...prev,
-            //   notifications: [...(prev.notifications || []), notificationText].slice(-5) // Keep last 5
-            // }));
           });
 
           // Store the unsubscribe function
@@ -692,6 +730,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     refreshLottery,
     setActiveTab,
     connectWallet,
-    purchaseTickets
+    purchaseTickets,
+    markAllAsRead
   }}>{children}</LineraContext.Provider>;
 };
