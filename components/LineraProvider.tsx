@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import * as linera from '@linera/client';
 import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
@@ -46,16 +46,7 @@ export interface LotteryRound {
   ticketsSold: number;
 }
 
-export interface NotificationItem {
-  id: string;
-  message: string;
-  timestamp: number;
-  read: boolean;
-  type: 'win';
-  amount: string;
-  roundId: string;
-  ticketId: string;
-}
+ 
 
 interface LineraContextType {
   client?: linera.Client;
@@ -72,7 +63,6 @@ interface LineraContextType {
   error?: Error;
   refreshBalance?: () => Promise<void>;
   subscriptionStatus?: string;
-  notifications: NotificationItem[];
   pendingBundles?: number;
   claimEnabled?: boolean;
   hasClaimed?: boolean;
@@ -93,15 +83,13 @@ interface LineraContextType {
   ethNotifications?: string[];
   connectWallet?: () => Promise<void>;
   purchaseTickets?: (amountTokens: string) => Promise<void>;
-  markAllAsRead?: () => void;
   claimChainBalance?: () => Promise<void>;
   markBundlesClaimed?: () => void;
 }
 
 const LineraContext = createContext<LineraContextType>({
   loading: false,
-  status: 'Not Connected',
-  notifications: []
+  status: 'Not Connected'
 });
 
 export const useLinera = () => useContext(LineraContext);
@@ -111,7 +99,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     loading: false,
     status: 'Not Connected',
     subscriptionStatus: '',
-    notifications: [],
     activeTab: 'btc',
     btcRounds: [],
     ethRounds: [],
@@ -132,51 +119,42 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
-  const notifiedWinsRef = useRef<Set<string>>(new Set()); // Track notified wins
+ 
 
-  // Load notifications from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('lottery_notifications');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setState(prev => ({ ...prev, notifications: parsed }));
-        try {
-          const keys = Array.isArray(parsed) ? parsed.map((n: any) => `win-${n.roundId}-${n.ticketId}`) : []
-          keys.forEach(k => notifiedWinsRef.current.add(k))
-        } catch { }
-      } catch (e) {
-        console.error("Failed to parse notifications", e);
-      }
-    }
-  }, []);
+ 
 
   useEffect(() => {
     try {
-      const clicked = localStorage.getItem('claim_has_clicked');
+      let clicked = localStorage.getItem('claim_has_clicked');
+      if (!clicked) {
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        const prefix = `${encodeURIComponent('claim_has_clicked')}=`;
+        for (const c of cookies) {
+          if (c.startsWith(prefix)) { clicked = decodeURIComponent(c.substring(prefix.length)); break; }
+        }
+      }
       if (clicked === '1') {
         setState(prev => ({ ...prev, hasClaimed: true }));
       }
     } catch {}
   }, []);
 
-  // Save notifications to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('lottery_notifications', JSON.stringify(state.notifications));
-  }, [state.notifications]);
+ 
 
-  const markAllAsRead = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      notifications: prev.notifications.map(n => ({ ...n, read: true }))
-    }));
-  }, []);
+ 
 
   const getPendingKey = (cid: string) => `linera_pending_bundles_${cid}`;
   const getClaimedKey = (cid: string) => `linera_claimed_bundles_${cid}`;
   const readHeights = (key: string): Set<number> => {
     try {
-      const raw = localStorage.getItem(key);
+      let raw = localStorage.getItem(key);
+      if (!raw) {
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        const prefix = `${encodeURIComponent(key)}=`;
+        for (const c of cookies) {
+          if (c.startsWith(prefix)) { raw = decodeURIComponent(c.substring(prefix.length)); break; }
+        }
+      }
       if (!raw) return new Set<number>();
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return new Set<number>();
@@ -184,8 +162,14 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch { return new Set<number>(); }
   };
   const writeHeights = (key: string, s: Set<number>) => {
-    try { localStorage.setItem(key, JSON.stringify(Array.from(s.values()))); } catch {}
+    const val = JSON.stringify(Array.from(s.values()));
+    try { localStorage.setItem(key, val); } catch {}
+    try {
+      const expires = new Date(Date.now() + 3650*24*60*60*1000).toUTCString();
+      document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(val)}; expires=${expires}; path=/; SameSite=Lax`;
+    } catch {}
   };
+ 
   const refreshClaimUiFromStorage = () => {
     const cid = (state.chainId || '').toLowerCase();
     if (!cid) return;
@@ -224,16 +208,21 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const claimChainBalance = async () => {
     if (!state.application) return;
     try {
+      const mutation = `mutation { chainBalance }`;
+      await state.application.query(JSON.stringify({ query: mutation }));
       markBundlesClaimed();
     } catch {}
   };
   useEffect(() => {
     refreshClaimUiFromStorage()
   }, [state.chainId]);
+ 
 
   const toMs = (v: any): number | null => {
     try { return parseTimestamp(v) } catch { return null }
   };
+
+ 
 
   const scheduleRefreshRounds = () => {
     if (refreshTimerRef.current !== null) return;
@@ -359,54 +348,9 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
-  // --- Notification Logic ---
+ 
 
-  // Centralized function to check for new wins
-  const checkNewWins = (winners: Winner[]) => {
-    const myChainId = (state.chainId || '').toLowerCase();
-    if (!myChainId) return;
-
-    const newNotifications: NotificationItem[] = [];
-
-    winners.forEach(w => {
-      const ownerLower = String(w.owner || '').toLowerCase();
-      if (ownerLower === myChainId) {
-        const uniqueKey = `${w.roundId}-${w.ticketId}`;
-        const winKey = `win-${uniqueKey}`;
-
-        if (!notifiedWinsRef.current.has(winKey)) {
-          notifiedWinsRef.current.add(winKey);
-
-          const newNotification: NotificationItem = {
-            id: crypto.randomUUID(),
-            message: `You won ${w.amount} LNRA in Round #${w.roundId}!`,
-            timestamp: Date.now(),
-            read: false,
-            type: 'win',
-            amount: w.amount,
-            roundId: w.roundId,
-            ticketId: w.ticketId
-          };
-
-          newNotifications.push(newNotification);
-        }
-      }
-    });
-
-    if (newNotifications.length > 0) {
-      setState(prev => ({
-        ...prev,
-        notifications: [...newNotifications, ...(prev.notifications || [])].slice(0, 50)
-      }));
-    }
-  };
-
-  // Re-check all loaded winners when chainId changes
-  useEffect(() => {
-    if (state.lotteryWinners && state.lotteryWinners.length > 0) {
-      checkNewWins(state.lotteryWinners);
-    }
-  }, [state.chainId]);
+ 
 
 
   // Lottery Fetching Logic
@@ -557,8 +501,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       lotteryWinners: mappedWinners
     }));
 
-    // Check for wins after updating state
-    checkNewWins(mappedWinners);
+ 
   };
 
   const applyWinnerInsert = (payload: any) => {
@@ -595,8 +538,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return { ...prev, lotteryWinners: merged, lotteryRounds: rounds }
       })
 
-      // Check for wins
-      checkNewWins([winnerObj]);
+ 
     } catch { }
   }
 
@@ -629,27 +571,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return { ...prev, lotteryRounds: list }
       })
 
-      // If round closed/complete, fetch winners to check for personal wins
-      if (statusUpper === 'CLOSED' || statusUpper === 'COMPLETE') {
-        supabaseLottery
-          .from('lottery_winners')
-          .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
-          .eq('round_id', Number(row.id))
-          .order('created_at', { ascending: false })
-          .limit(50)
-          .then(({ data }) => {
-            if (data) {
-              const winners: Winner[] = data.map((w: any) => ({
-                roundId: String(w.round_id),
-                ticketId: String(w.ticket_number),
-                owner: String(w.source_chain_id || 'unknown'),
-                amount: String(w.prize_amount),
-                createdAt: w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now()
-              }));
-              checkNewWins(winners);
-            }
-          })
-      }
     } catch { }
   }
 
@@ -959,7 +880,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setActiveTab,
     connectWallet,
     purchaseTickets,
-    markAllAsRead,
     claimChainBalance,
     markBundlesClaimed
   }}>{children}</LineraContext.Provider>;

@@ -1,4 +1,4 @@
-import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus, Ticket, Bell } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus, Ticket } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
 import { useState, useEffect, useRef } from "react";
@@ -18,10 +18,9 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
     application,
     status,
     connectWallet,
-    notifications,
-    markAllAsRead,
     claimEnabled,
     pendingBundles,
+    claimChainBalance,
     markBundlesClaimed,
     hasClaimed
   } = useLinera();
@@ -33,17 +32,14 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
 
   // Dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [chainBalance, setChainBalance] = useState<string>("0");
   const [mintAmount, setMintAmount] = useState<string>("");
   const [isMinting, setIsMinting] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [showMintInput, setShowMintInput] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const notificationRef = useRef<HTMLDivElement>(null);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
   // Оновлюємо поточний час кожну секунду
   useEffect(() => {
@@ -61,9 +57,6 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
         setIsDropdownOpen(false);
         setShowMintInput(false);
       }
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -71,9 +64,6 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
   }, []);
 
   // Handle opening notifications - mark as read if needed
-  const handleOpenNotifications = () => {
-    setIsNotificationsOpen(!isNotificationsOpen);
-  };
 
   // Запитуємо chainBalance при відкритті dropdown
   useEffect(() => {
@@ -282,10 +272,10 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                 <div className="relative">
                   <Button
                     onClick={async () => {
-                      if (!markBundlesClaimed || isClaiming || !claimEnabled) return;
+                      if (!claimChainBalance || isClaiming || !claimEnabled) return;
                       setIsClaiming(true);
                       try {
-                        await Promise.resolve(markBundlesClaimed());
+                        await claimChainBalance();
                       } finally {
                         setIsClaiming(false);
                       }
@@ -301,80 +291,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                     </span>
                   )}
                 </div>
-                {/* Notifications */}
-                <div className="relative" ref={notificationRef}>
-                  <button
-                    onClick={handleOpenNotifications}
-                    className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
-                  >
-                    <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'text-gray-800' : 'text-gray-600'}`} />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-0 right-0 flex items-center justify-center h-4 w-4 rounded-full ring-2 ring-white bg-red-500 text-[10px] font-bold text-white">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {isNotificationsOpen && (
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black ring-opacity-5">
-                      <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-gray-900">Notifications</h3>
-                          {unreadCount > 0 && (
-                            <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">
-                              {unreadCount} New
-                            </span>
-                          )}
-                        </div>
-                        {notifications && notifications.length > 0 && unreadCount > 0 && (
-                          <button
-                            onClick={() => markAllAsRead && markAllAsRead()}
-                            className="text-xs text-red-600 hover:text-red-700 font-medium hover:underline"
-                          >
-                            Mark all as read
-                          </button>
-                        )}
-                      </div>
-                      <div className="max-h-[24rem] overflow-y-auto custom-scrollbar">
-                        {notifications && notifications.length > 0 ? (
-                          <div className="divide-y divide-gray-50">
-                            {notifications.map((note) => (
-                              <div
-                                key={note.id}
-                                className={`p-4 transition-colors flex gap-3 group ${!note.read ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50 hover:bg-gray-50'}`}
-                              >
-                                <div className="mt-1 relative">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${!note.read ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-500'}`}>
-                                    <Ticket className="w-4 h-4" />
-                                  </div>
-                                  {!note.read && (
-                                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm leading-relaxed ${!note.read ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
-                                    {note.message}
-                                  </p>
-                                  <p className="text-xs text-gray-400 mt-1">
-                                    {new Date(note.timestamp).toLocaleTimeString()}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                              <Bell className="w-6 h-6 text-gray-400" />
-                            </div>
-                            <p className="text-gray-900 font-medium mb-1">No notifications</p>
-                            <p className="text-sm text-gray-500">You're all caught up!</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+ 
 
                 {/* Wallet Dropdown */}
                 <div className="relative" ref={dropdownRef}>
