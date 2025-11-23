@@ -1,4 +1,4 @@
-import { LotteryRound, Winner } from "./LotterySection";
+import { LotteryRound, Winner } from "./LineraProvider";
 import { Trophy, Clock, Ticket, Activity, TrendingUp } from "lucide-react";
 import { formatLocalTime } from "../utils/timeUtils";
 import { useMemo } from "react";
@@ -16,7 +16,9 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
         // Process Latest Winners
         if (latest) {
             latest.forEach(w => {
-                allWinners.push({ winner: w, roundId: 'Live', time: Date.now() });
+                // Use createdAt from the winner object, fallback to Date.now() if missing
+                // Use w.roundId if available, otherwise 'Live'
+                allWinners.push({ winner: w, roundId: w.roundId || 'Live', time: w.createdAt || Date.now() });
                 uniquePlayers.add(w.owner);
             });
         }
@@ -24,7 +26,8 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
         // Process History Rounds
         rounds.forEach(r => {
             r.winners.forEach(w => {
-                allWinners.push({ winner: w, roundId: r.id, time: r.endTime });
+                // For historical rounds, use winner creation time or fallback to round end time
+                allWinners.push({ winner: w, roundId: r.id, time: w.createdAt || r.endTime });
                 uniquePlayers.add(w.owner);
             });
         });
@@ -33,7 +36,8 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
         const seen = new Set();
         const feed = allWinners
             .filter(item => {
-                const key = `${item.winner.ticketId}-${item.winner.owner}`;
+                // Deduplicate based on Round ID + Ticket ID to allow same ticket number in different rounds
+                const key = `${item.roundId}-${item.winner.ticketId}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
@@ -284,14 +288,14 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                             stats.feed.map((item, idx) => (
                                 <div key={`${item.winner.ticketId}-${idx}`} className="group bg-white border border-gray-100 rounded-2xl p-4 hover:border-red-600 hover:shadow-md transition-all duration-300 flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center font-black text-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
-                                        <Trophy className="w-5 h-5" />
+                                        <Ticket className="w-5 h-5" />
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="font-black text-gray-900 text-lg">{item.winner.amount} LNRA</span>
                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                                {item.roundId === 'Live' ? 'Just Now' : formatLocalTime(item.time)}
+                                                {formatLocalTime(item.time)}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
@@ -301,6 +305,10 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                                             <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                                             <span className="flex items-center gap-1">
                                                 <Ticket className="w-3 h-3" /> #{item.winner.ticketId}
+                                            </span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span className="flex items-center gap-1 text-gray-400">
+                                                R#{item.roundId}
                                             </span>
                                         </div>
                                     </div>

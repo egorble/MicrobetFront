@@ -29,9 +29,11 @@ interface Round {
 export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
 
 export interface Winner {
+  roundId: string;
   ticketId: string;
   owner: string;
   amount: string;
+  createdAt: number;
 }
 
 export interface LotteryRound {
@@ -108,6 +110,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const ethWebSocketRef = useRef<WebSocketClient | null>(null);
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
+  const lastLotteryFetchRef = useRef<number>(0);
 
 
   const toMs = (v: any): number | null => {
@@ -240,6 +243,12 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Lottery Fetching Logic
   const refreshLottery = async () => {
+    const now = Date.now();
+    if (now - lastLotteryFetchRef.current < 1000) {
+      return; // Throttled: max 1 request per second
+    }
+    lastLotteryFetchRef.current = now;
+
     // 1. Fetch rounds descending (newest first)
     const { data: dbRounds } = await supabaseLottery
       .from('lottery_rounds')
@@ -254,30 +263,60 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       .limit(200);
 
     const winnersByRound = new Map<number, Winner[]>();
+    const seenTickets = new Set<string>();
+
     (latestWinners || []).forEach((w: any) => {
-      const list = winnersByRound.get(Number(w.round_id)) || [];
+      const roundId = Number(w.round_id);
+      const ticketId = String(w.ticket_number);
+      const uniqueKey = `${roundId}-${ticketId}`;
+      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now();
+
+      if (seenTickets.has(uniqueKey)) return;
+      seenTickets.add(uniqueKey);
+
+      const list = winnersByRound.get(roundId) || [];
       list.push({
-        ticketId: String(w.ticket_number),
+        roundId: String(roundId),
+        ticketId: ticketId,
         owner: String(w.source_chain_id || 'unknown'),
-        amount: String(w.prize_amount)
+        amount: String(w.prize_amount),
+        createdAt: createdAt
       });
-      winnersByRound.set(Number(w.round_id), list);
+      winnersByRound.set(roundId, list);
     });
 
-    // Removed dbRoundsCache as it was unused
+    const mappedWinners: Winner[] = [];
+    const seenGlobalTickets = new Set<string>();
 
-    const mappedWinners: Winner[] = (latestWinners || []).slice(0, 20).map((w: any) => ({
-      ticketId: String(w.ticket_number),
-      owner: String(w.source_chain_id || 'unknown'),
-      amount: String(w.prize_amount)
-    }));
+    (latestWinners || []).forEach((w: any) => {
+      const ticketId = String(w.ticket_number);
+      const roundId = Number(w.round_id);
+      const uniqueKey = `${roundId}-${ticketId}`;
+      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now();
+
+      if (seenGlobalTickets.has(uniqueKey)) return;
+      if (mappedWinners.length >= 50) return;
+
+      seenGlobalTickets.add(uniqueKey);
+      mappedWinners.push({
+        roundId: String(roundId),
+        ticketId: ticketId,
+        owner: String(w.source_chain_id || 'unknown'),
+        amount: String(w.prize_amount),
+        createdAt: createdAt
+      });
+    });
 
     // Sync with GraphQL if available
     let combined = (dbRounds || []).map((r: any) => {
       const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
       const endMs = createdMs + 5 * 60 * 1000;
       const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
-      const winners: Winner[] = []
+      let winners: Winner[] = winnersByRound.get(r.id) || [];
+
+      // Sort winners deterministically to prevent UI duplication during reveal animation
+      winners.sort((a, b) => Number(b.ticketId) - Number(a.ticketId));
+
       return {
         id: String(r.id),
         status: statusUpper,
@@ -482,7 +521,18 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
             // Check if this is a new block notification (indicates state change)
             if (notification.reason?.NewBlock) {
-              console.log('New block detected, refreshing balance...');
+              const newBlockHeight = Number(notification.reason.NewBlock.height);
+              const storageKey = `linera_last_block_${state.chainId}`;
+              const lastHeight = Number(localStorage.getItem(storageKey) || '0');
+
+              if (newBlockHeight < lastHeight) {
+                console.log(`Ignoring old block notification: ${newBlockHeight} < ${lastHeight}`);
+                return;
+              }
+
+              // Update stored height
+              localStorage.setItem(storageKey, String(newBlockHeight));
+              console.log(`Processing new block: ${newBlockHeight}, refreshing balance...`);
 
               // Refresh balance when new block is detected
               if (state.application && state.accountOwner) {

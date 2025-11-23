@@ -57,7 +57,9 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
     useEffect(() => {
         if (!round) return;
         const isDrawing = round.status === 'DRAWING' || round.status === 'CLOSED';
-        if (!isDrawing) {
+        const isComplete = round.status === 'COMPLETE';
+
+        if (!isDrawing && !isComplete) {
             setDisplayedWinners([]);
             return;
         }
@@ -122,6 +124,7 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
     // Trust the backend status. If it says ACTIVE, it is active, even if our local timer thinks it's over.
     const isActive = round?.status === "ACTIVE";
     const isDrawing = round?.status === "DRAWING" || round?.status === "CLOSED";
+    const isComplete = round?.status === "COMPLETE";
 
     if (!round) {
         return (
@@ -175,6 +178,11 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                         <Sparkles className="w-4 h-4 animate-spin-slow" />
                                         Live Draw in Progress
                                     </>
+                                ) : isComplete ? (
+                                    <>
+                                        <Check className="w-4 h-4" />
+                                        Round Complete
+                                    </>
                                 ) : (
                                     <>
                                         <Clock className="w-4 h-4" />
@@ -190,6 +198,8 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                     <>Next draw in: <span className="font-mono font-bold text-gray-900">{timeLeft}</span></>
                                 ) : isDrawing ? (
                                     <span className="text-red-600 font-bold animate-pulse">Revealing Winners...</span>
+                                ) : isComplete ? (
+                                    "All prizes distributed"
                                 ) : (
                                     "Preparing Draw..."
                                 )}
@@ -207,32 +217,39 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                             </div>
                         </div>
 
-                        {/* How it works / Real-time Badge */}
-                        <div className="pt-6 border-t border-gray-100 space-y-4">
-                            <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                        {/* How it works - Block Design */}
+                        <div className="pt-8 border-t border-gray-100">
+                            <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-4">
                                 <Sparkles className="w-4 h-4 text-yellow-500" />
                                 How to Play & Win
                             </h4>
 
-                            <div className="space-y-3">
-                                <div className="flex gap-3">
-                                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">1</div>
-                                    <p className="text-sm text-gray-600">
-                                        <strong>Buy Tickets:</strong> Purchase as many tickets as you want before the round ends.
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {/* Step 1 */}
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-gray-200 transition-colors">
+                                    <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-sm font-bold text-gray-900 mb-3 border border-gray-100">1</div>
+                                    <h5 className="font-bold text-gray-900 text-sm mb-1">Buy Tickets</h5>
+                                    <p className="text-xs text-gray-500 leading-relaxed">
+                                        Purchase tickets before the timer ends.
                                     </p>
                                 </div>
 
-                                <div className="flex gap-3">
-                                    <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center text-xs font-bold text-red-600 shrink-0">2</div>
-                                    <p className="text-sm text-gray-600">
-                                        <strong>Watch Live:</strong> Don't leave! Watch the <strong>Real-Time Draw</strong> right here. Winners are selected instantly on-chain.
+                                {/* Step 2 */}
+                                <div className="bg-red-50 rounded-xl p-4 border border-red-100 hover:border-red-200 transition-colors relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 -mt-2 -mr-2 w-12 h-12 bg-red-100 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                                    <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-sm font-bold text-red-600 mb-3 border border-red-100 relative z-10">2</div>
+                                    <h5 className="font-bold text-gray-900 text-sm mb-1 relative z-10">Watch Live</h5>
+                                    <p className="text-xs text-gray-600 leading-relaxed relative z-10">
+                                        Don't leave! Winners are picked <strong>live</strong> on-screen.
                                     </p>
                                 </div>
 
-                                <div className="flex gap-3">
-                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-600 shrink-0">3</div>
-                                    <p className="text-sm text-gray-600">
-                                        <strong>Instant Payout:</strong> If you win, prizes are sent directly to your wallet immediately.
+                                {/* Step 3 */}
+                                <div className="bg-green-50 rounded-xl p-4 border border-green-100 hover:border-green-200 transition-colors">
+                                    <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-sm font-bold text-green-600 mb-3 border border-green-100">3</div>
+                                    <h5 className="font-bold text-gray-900 text-sm mb-1">Instant Win</h5>
+                                    <p className="text-xs text-gray-600 leading-relaxed">
+                                        Prizes are sent to your wallet immediately.
                                     </p>
                                 </div>
                             </div>
@@ -298,10 +315,10 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                             <div className="text-center space-y-6">
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-bold text-gray-900">
-                                        {isDrawing ? "Drawing Winners!" : "Round Closed"}
+                                        {isDrawing ? "Drawing Winners!" : isComplete ? "Round Complete" : "Round Closed"}
                                     </h3>
                                     <p className="text-gray-500">
-                                        {isDrawing ? "Watch the winners appear live below" : "Check the results below"}
+                                        {isDrawing ? "Watch the winners appear live below" : isComplete ? "All winners have been paid" : "Check the results below"}
                                     </p>
                                 </div>
 
