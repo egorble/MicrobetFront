@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLinera, LotteryRound } from "./LineraProvider";
 import { LotteryHero } from "./LotteryHero";
 import { LotteryHistory } from "./LotteryHistory";
+import { LotteryPoolsInfo } from "./LotteryPoolsInfo";
 
 export function LotterySection() {
     const { purchaseTickets, lotteryRounds, lotteryWinners } = useLinera();
@@ -62,6 +63,9 @@ export function LotterySection() {
 
             {/* History Section */}
             <LotteryHistory rounds={historyRounds} latest={lotteryWinners || []} />
+
+            {/* Prize Distribution Info */}
+            <LotteryPoolsInfo />
         </div>
     );
 }
