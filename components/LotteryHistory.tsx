@@ -62,7 +62,7 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
         // Fill with empty slots if less than 12 to keep chart stable
         if (chartData.length < 12) {
             const missing = 12 - chartData.length;
-            const placeholders = Array(missing).fill(0).map((_, i) => ({ id: `?`, val: 0 }));
+            const placeholders = Array(missing).fill(0).map(() => ({ id: `?`, val: 0 }));
             chartData = [...placeholders, ...chartData];
         }
 

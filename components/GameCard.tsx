@@ -27,10 +27,9 @@ interface GameCardProps {
   game: Game;
   currentPrice?: string;
   gameType: 'BTC' | 'ETH';
-  onPredictionClick?: (prediction: 'UP' | 'DOWN') => void;
 }
 
-export function GameCard({ game, currentPrice, gameType, onPredictionClick }: GameCardProps) {
+export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
   const { btcApplication, ethApplication, accountOwner, refreshBalance } = useLinera();
   const [lightningActive, setLightningActive] = useState(false);
 

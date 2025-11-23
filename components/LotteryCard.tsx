@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { formatLocalTime } from "../utils/timeUtils";
 import { ArrowLeft, Check, AlertCircle, Ticket, Trophy, Clock } from "lucide-react";
 import { LightningAnimation } from "./LightningAnimation";
 

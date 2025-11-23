@@ -133,6 +133,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       try {
         const parsed = JSON.parse(saved);
         setState(prev => ({ ...prev, notifications: parsed }));
+        try {
+          const keys = Array.isArray(parsed) ? parsed.map((n: any) => `win-${n.roundId}-${n.ticketId}`) : []
+          keys.forEach(k => notifiedWinsRef.current.add(k))
+        } catch {}
       } catch (e) {
         console.error("Failed to parse notifications", e);
       }
@@ -150,6 +154,99 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       notifications: prev.notifications.map(n => ({ ...n, read: true }))
     }));
   }, []);
+
+  const reconcileMyWins = async () => {
+    const myChainId = (state.chainId || '').toLowerCase()
+    if (!myChainId) return
+    try {
+      let query = supabaseLottery
+        .from('lottery_winners')
+        .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      const { data, error } = await query
+      if (error) return
+      const rows = (data || []).filter((w: any) => String(w.source_chain_id || '').toLowerCase() === myChainId)
+      for (const w of rows) {
+        const uniqueKey = `${Number(w.round_id)}-${String(w.ticket_number)}`
+        const winKey = `win-${uniqueKey}`
+        if (!notifiedWinsRef.current.has(winKey)) {
+          notifiedWinsRef.current.add(winKey)
+          const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now()
+          const newNotification: NotificationItem = {
+            id: crypto.randomUUID(),
+            message: `You won ${String(w.prize_amount)} LNRA in Round #${String(w.round_id)}!`,
+            timestamp: Date.now(),
+            read: false,
+            type: 'win',
+            amount: String(w.prize_amount),
+            roundId: String(w.round_id),
+            ticketId: String(w.ticket_number)
+          }
+          setState(prev => ({
+            ...prev,
+            notifications: [newNotification, ...(prev.notifications || [])].slice(0, 50),
+            lotteryWinners: [{
+              roundId: String(w.round_id),
+              ticketId: String(w.ticket_number),
+              owner: String(w.source_chain_id || 'unknown'),
+              amount: String(w.prize_amount),
+              createdAt
+            }, ...(prev.lotteryWinners || [])].slice(0, 50)
+          }))
+        }
+      }
+    } catch {}
+  }
+
+  const syncNotificationsFromState = () => {
+    const myChainId = (state.chainId || '').toLowerCase();
+    if (!myChainId) return;
+    try {
+      const latest: Winner[] = (state.lotteryWinners || []);
+      const rounds: LotteryRound[] = (state.lotteryRounds || []);
+      const all: { winner: Winner; roundId: string; time: number }[] = [];
+      latest.forEach((w: Winner) => {
+        all.push({ winner: w, roundId: w.roundId || 'Live', time: w.createdAt || Date.now() });
+      });
+      rounds.forEach((r: LotteryRound) => {
+        const rw = (r.winners || []);
+        rw.forEach((w: Winner) => {
+          all.push({ winner: w, roundId: r.id, time: w.createdAt || r.endTime });
+        });
+      });
+      const seen = new Set<string>();
+      const feed = all.filter(item => {
+        const key = `${item.roundId}-${item.winner.ticketId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      feed.forEach(item => {
+        const ownerLower = String(item.winner.owner || '').toLowerCase();
+        if (ownerLower === myChainId) {
+          const key = `win-${item.roundId}-${item.winner.ticketId}`;
+          if (!notifiedWinsRef.current.has(key)) {
+            notifiedWinsRef.current.add(key);
+            const n: NotificationItem = {
+              id: crypto.randomUUID(),
+              message: `You won ${item.winner.amount} LNRA in Round #${item.roundId}!`,
+              timestamp: Date.now(),
+              read: false,
+              type: 'win',
+              amount: String(item.winner.amount),
+              roundId: String(item.roundId),
+              ticketId: String(item.winner.ticketId)
+            };
+            setState(prev => ({
+              ...prev,
+              notifications: [n, ...(prev.notifications || [])].slice(0, 50)
+            }));
+          }
+        }
+      });
+    } catch {}
+  };
 
   const toMs = (v: any): number | null => {
     try { return parseTimestamp(v) } catch { return null }
@@ -347,8 +444,9 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
       mappedWinners.push(winnerObj);
 
-      // Check for personal win
-      if (state.chainId && winnerObj.owner === state.chainId) {
+      // Check for personal win (case-insensitive)
+      const myChainId = (state.chainId || '').toLowerCase();
+      if (myChainId && winnerObj.owner.toLowerCase() === myChainId) {
         const winKey = `win-${uniqueKey}`;
         if (!notifiedWinsRef.current.has(winKey)) {
           notifiedWinsRef.current.add(winKey);
@@ -366,7 +464,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
           setState(prev => ({
             ...prev,
-            notifications: [newNotification, ...prev.notifications].slice(0, 50)
+            notifications: [newNotification, ...(prev.notifications || [])].slice(0, 50)
           }));
         }
       }
@@ -445,6 +543,57 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     combined.sort((a, b) => Number(b.id) - Number(a.id));
 
+    const scanFeedForMyWins = (rounds: LotteryRound[], latestWinners: Winner[]) => {
+      const myChainId = (state.chainId || '').toLowerCase()
+      if (!myChainId) return
+      try {
+        const all: { winner: Winner; roundId: string; time: number }[] = [];
+        const latest = (latestWinners || []);
+        latest.forEach((w: Winner) => {
+          all.push({ winner: w, roundId: w.roundId || 'Live', time: w.createdAt || Date.now() })
+        })
+        const roundList = (rounds || []);
+        roundList.forEach((r: LotteryRound) => {
+          const rw = (r.winners || []);
+          rw.forEach((w: Winner) => {
+            all.push({ winner: w, roundId: r.id, time: w.createdAt || r.endTime })
+          })
+        })
+        const seen = new Set<string>()
+        const feed = all.filter(item => {
+          const key = `${item.roundId}-${item.winner.ticketId}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        feed.forEach(item => {
+          const ownerLower = String(item.winner.owner || '').toLowerCase()
+          if (ownerLower === myChainId) {
+            const key = `win-${item.roundId}-${item.winner.ticketId}`
+            if (!notifiedWinsRef.current.has(key)) {
+              notifiedWinsRef.current.add(key)
+              const n: NotificationItem = {
+                id: crypto.randomUUID(),
+                message: `You won ${item.winner.amount} LNRA in Round #${item.roundId}!`,
+                timestamp: Date.now(),
+                read: false,
+                type: 'win',
+                amount: String(item.winner.amount),
+                roundId: String(item.roundId),
+                ticketId: String(item.winner.ticketId)
+              }
+              setState(prev => ({
+                ...prev,
+                notifications: [n, ...(prev.notifications || [])].slice(0, 50)
+              }))
+            }
+          }
+        })
+      } catch {}
+    }
+
+    scanFeedForMyWins(combined, mappedWinners)
+
     setState(prev => ({
       ...prev,
       lotteryRounds: combined,
@@ -505,6 +654,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
         return { ...prev, lotteryWinners: merged, lotteryRounds: rounds }
       })
+      setTimeout(() => { reconcileMyWins() }, 0)
     } catch {}
   }
 
@@ -583,6 +733,14 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     } catch {}
   }
+
+  useEffect(() => {
+    reconcileMyWins()
+  }, [state.chainId])
+
+  useEffect(() => {
+    syncNotificationsFromState()
+  }, [state.lotteryWinners, state.lotteryRounds, state.chainId])
 
 
   // Функція для зміни активної вкладки
