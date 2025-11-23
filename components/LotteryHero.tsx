@@ -200,6 +200,8 @@ export function LotteryHero({ round, allWinners, onBuyTicket }: LotteryHeroProps
                                 </div>
                             </div>
                         </div>
+
+
                     </div>
 
                     {/* Right Side: Action Card or Live Draw */}
