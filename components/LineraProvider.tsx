@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import * as linera from '@linera/client';
 import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
-import { supabase } from '../utils/supabaseClient';
+import { supabase, supabaseLottery } from '../utils/supabaseClient';
+import { parseTimestamp } from '../utils/timeUtils';
 
 // Types for rounds data
 interface Round {
@@ -23,6 +24,24 @@ interface Round {
   // Calculated fields
   upPayout?: number;
   downPayout?: number;
+}
+
+export type LotteryStatus = "ACTIVE" | "CLOSED" | "DRAWING" | "COMPLETE";
+
+export interface Winner {
+  ticketId: string;
+  owner: string;
+  amount: string;
+}
+
+export interface LotteryRound {
+  id: string;
+  status: LotteryStatus;
+  prizePool: string;
+  ticketPrice: string;
+  endTime: number; // timestamp
+  winners: Winner[]; // All generated winners
+  ticketsSold: number;
 }
 
 interface LineraContextType {
@@ -47,6 +66,10 @@ interface LineraContextType {
   ethRounds?: Round[];
   setActiveTab?: (tab: 'btc' | 'eth') => void;
   refreshRounds?: () => Promise<void>;
+  // Lottery Data
+  lotteryRounds?: LotteryRound[];
+  lotteryWinners?: Winner[];
+  refreshLottery?: () => Promise<void>;
   // WebSocket statuses
   btcWebSocketStatus?: string;
   ethWebSocketStatus?: string;
@@ -56,16 +79,16 @@ interface LineraContextType {
   purchaseTickets?: (amountTokens: string) => Promise<void>;
 }
 
-const LineraContext = createContext<LineraContextType>({ 
-  loading: false, 
-  status: 'Not Connected' 
+const LineraContext = createContext<LineraContextType>({
+  loading: false,
+  status: 'Not Connected'
 });
 
 export const useLinera = () => useContext(LineraContext);
 
 export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<LineraContextType>({ 
-    loading: false, 
+  const [state, setState] = useState<LineraContextType>({
+    loading: false,
     status: 'Not Connected',
     subscriptionStatus: '',
     notifications: [],
@@ -75,14 +98,21 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     btcWebSocketStatus: '🔴 Disconnected',
     ethWebSocketStatus: '🔴 Disconnected',
     btcNotifications: [],
-    ethNotifications: []
+    ethNotifications: [],
+    lotteryRounds: [],
+    lotteryWinners: []
   });
-  
+
   const subscriptionRef = useRef<any>(null); // Для зберігання subscription
   const btcWebSocketRef = useRef<WebSocketClient | null>(null);
   const ethWebSocketRef = useRef<WebSocketClient | null>(null);
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
+
+
+  const toMs = (v: any): number | null => {
+    try { return parseTimestamp(v) } catch { return null }
+  };
 
   const scheduleRefreshRounds = () => {
     if (refreshTimerRef.current !== null) return;
@@ -108,10 +138,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
         }
       `;
-      
+
       const result = await application.query(JSON.stringify({ query }));
       console.log('Balance query result:', result);
-      
+
       // Парсимо результат
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       const balance = parsedResult?.data?.accounts?.entry?.value || "0";
@@ -144,12 +174,12 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const totalPool = parseFloat(round.prizePool);
     const upPool = parseFloat(round.upBetsPool);
     const downPool = parseFloat(round.downBetsPool);
-    
+
     if (totalPool === 0) return { upPayout: 1, downPayout: 1 };
-    
+
     const upPayout = upPool > 0 ? totalPool / upPool : 1;
     const downPayout = downPool > 0 ? totalPool / downPool : 1;
-    
+
     return { upPayout, downPayout };
   };
 
@@ -179,7 +209,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         downBetsPool: String(row.down_bets_pool),
       })) as Round[];
       const rounds = roundsDesc.slice().sort((a, b) => a.id - b.id);
-      
+
       // Додаємо розраховані payout коефіцієнти
       return rounds.map((round: Round) => {
         const { upPayout, downPayout } = calculatePayouts(round);
@@ -206,6 +236,115 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     } catch (error) {
       // Мовчки обробляємо помилку
     }
+  };
+
+  // Lottery Fetching Logic
+  const refreshLottery = async () => {
+    // 1. Fetch rounds descending (newest first)
+    const { data: dbRounds } = await supabaseLottery
+      .from('lottery_rounds')
+      .select('*')
+      .order('id', { ascending: false })
+      .limit(50);
+
+    const { data: latestWinners } = await supabaseLottery
+      .from('lottery_winners')
+      .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    const winnersByRound = new Map<number, Winner[]>();
+    (latestWinners || []).forEach((w: any) => {
+      const list = winnersByRound.get(Number(w.round_id)) || [];
+      list.push({
+        ticketId: String(w.ticket_number),
+        owner: String(w.source_chain_id || 'unknown'),
+        amount: String(w.prize_amount)
+      });
+      winnersByRound.set(Number(w.round_id), list);
+    });
+
+    // Removed dbRoundsCache as it was unused
+
+    const mappedWinners: Winner[] = (latestWinners || []).slice(0, 20).map((w: any) => ({
+      ticketId: String(w.ticket_number),
+      owner: String(w.source_chain_id || 'unknown'),
+      amount: String(w.prize_amount)
+    }));
+
+    // Sync with GraphQL if available
+    let combined = (dbRounds || []).map((r: any) => {
+      const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
+      const endMs = createdMs + 5 * 60 * 1000;
+      const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
+      const winners: Winner[] = []
+      return {
+        id: String(r.id),
+        status: statusUpper,
+        prizePool: String(r.prize_pool),
+        ticketPrice: String(r.ticket_price),
+        endTime: endMs,
+        ticketsSold: Number(r.total_tickets_sold || 0),
+        winners,
+      } as LotteryRound
+    });
+
+    if (state.lotteryApplication) {
+      try {
+        const q = {
+          query: `query { allRounds { id status ticketPrice totalTicketsSold prizePool createdAt closedAt } }`
+        };
+        const res = await state.lotteryApplication.query(JSON.stringify(q));
+        const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+        const list = parsed?.data?.allRounds || [];
+
+        const gqlMapped: LotteryRound[] = list.map((r: any) => {
+          const createdMs = r.createdAt ? (toMs(r.createdAt) ?? Date.now()) : Date.now();
+          const endMs = createdMs + 5 * 60 * 1000;
+          return {
+            id: String(r.id),
+            status: ((): LotteryStatus => {
+              const su = String(r.status).toUpperCase() as LotteryStatus;
+              if (su === 'ACTIVE' && endMs <= Date.now()) return 'CLOSED';
+              return su;
+            })(),
+            prizePool: String(r.prizePool),
+            ticketPrice: String(r.ticketPrice),
+            endTime: endMs,
+            ticketsSold: Number(r.totalTicketsSold || 0),
+            winners: [],
+          };
+        });
+
+        // Find active candidate from GraphQL
+        const activeCandidate = gqlMapped
+          .filter(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
+          .sort((a, b) => Number(b.id) - Number(a.id))[0];
+
+        if (activeCandidate) {
+          const idx = combined.findIndex(rr => rr.id === activeCandidate.id);
+          if (idx >= 0) {
+            combined[idx] = {
+              ...combined[idx],
+              ...activeCandidate,
+              winners: combined[idx].winners.length > 0 ? combined[idx].winners : activeCandidate.winners
+            };
+          } else {
+            combined.unshift(activeCandidate);
+          }
+        }
+      } catch (e) {
+        console.error("GraphQL Sync Error:", e);
+      }
+    }
+
+    combined.sort((a, b) => Number(b.id) - Number(a.id));
+
+    setState(prev => ({
+      ...prev,
+      lotteryRounds: combined,
+      lotteryWinners: mappedWinners
+    }));
   };
 
 
@@ -332,32 +471,32 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         console.log('Setting up subscription...');
         console.log('Client object:', state.client);
         console.log('Client methods:', state.client ? Object.getOwnPropertyNames(Object.getPrototypeOf(state.client)) : 'No client');
-        
+
         // ✅ CORRECT: Use client.onNotification() for reactivity
         if (state.client && state.accountOwner) {
           console.log('Setting up notification callback through client...');
-          
+
           // Set up notification callback using client.onNotification()
           const unsubscribe = state.client.onNotification((notification: any) => {
             console.log('Received notification:', notification);
 
             // Check if this is a new block notification (indicates state change)
-             if (notification.reason?.NewBlock) {
-               console.log('New block detected, refreshing balance...');
-               
-               // Refresh balance when new block is detected
-               if (state.application && state.accountOwner) {
-                 queryBalance(state.application, state.accountOwner).then(newBalance => {
-                   console.log('Balance updated after new block:', newBalance);
-                   
-                   // ✅ ВАЖЛИВО: Оновлюємо стан з новим балансом
-                   setState(prev => ({
-                     ...prev,
-                     balance: newBalance
-                   }));
-                 });
-               }
-             }
+            if (notification.reason?.NewBlock) {
+              console.log('New block detected, refreshing balance...');
+
+              // Refresh balance when new block is detected
+              if (state.application && state.accountOwner) {
+                queryBalance(state.application, state.accountOwner).then(newBalance => {
+                  console.log('Balance updated after new block:', newBalance);
+
+                  // ✅ ВАЖЛИВО: Оновлюємо стан з новим балансом
+                  setState(prev => ({
+                    ...prev,
+                    balance: newBalance
+                  }));
+                });
+              }
+            }
 
             // Add notification to the list for display
             const timestamp = new Date().toLocaleTimeString();
@@ -368,7 +507,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               notifications: [...(prev.notifications || []), notificationText].slice(-5) // Keep last 5
             }));
           });
-          
+
           // Store the unsubscribe function
           subscriptionRef.current = { unsubscribe };
 
@@ -378,7 +517,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }));
 
           console.log('Notification callback set up successfully');
-          
+
           // Initial load of rounds data
           refreshRounds();
         } else {
@@ -437,17 +576,36 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [state.status, state.loading])
 
+  // Lottery Subscriptions
+  useEffect(() => {
+    refreshLottery();
+
+    const chRounds = supabaseLottery
+      .channel('lottery_rounds_changes_global')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_rounds' }, refreshLottery)
+      .subscribe();
+    const chWinners = supabaseLottery
+      .channel('lottery_winners_changes_global')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, refreshLottery)
+      .subscribe();
+
+    return () => {
+      supabaseLottery.removeChannel(chRounds);
+      supabaseLottery.removeChannel(chWinners);
+    };
+  }, [state.lotteryApplication]); // Re-run when lotteryApplication becomes available to sync GQL
+
   // Окремий useEffect для cleanup при unmount компонента
   useEffect(() => {
     return () => {
       console.log('Component unmounting - cleaning up WebSocket connections...');
       webSocketSetupRef.current = false;
-      
+
       if (btcWebSocketRef.current) {
         btcWebSocketRef.current.disconnect();
         btcWebSocketRef.current = null;
       }
-      
+
       if (ethWebSocketRef.current) {
         ethWebSocketRef.current.disconnect();
         ethWebSocketRef.current = null;
@@ -460,9 +618,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, [])
 
   return <LineraContext.Provider value={{
-    ...state, 
+    ...state,
     refreshBalance,
     refreshRounds,
+    refreshLottery,
     setActiveTab,
     connectWallet,
     purchaseTickets
