@@ -73,6 +73,9 @@ interface LineraContextType {
   refreshBalance?: () => Promise<void>;
   subscriptionStatus?: string;
   notifications: NotificationItem[];
+  pendingBundles?: number;
+  claimEnabled?: boolean;
+  hasClaimed?: boolean;
   // New fields for multi-chain support
   activeTab?: 'btc' | 'eth';
   btcRounds?: Round[];
@@ -91,6 +94,7 @@ interface LineraContextType {
   connectWallet?: () => Promise<void>;
   purchaseTickets?: (amountTokens: string) => Promise<void>;
   markAllAsRead?: () => void;
+  claimChainBalance?: () => Promise<void>;
 }
 
 const LineraContext = createContext<LineraContextType>({
@@ -115,7 +119,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     btcNotifications: [],
     ethNotifications: [],
     lotteryRounds: [],
-    lotteryWinners: []
+    lotteryWinners: [],
+    pendingBundles: 0,
+    claimEnabled: false,
+    hasClaimed: false
   });
 
   const subscriptionRef = useRef<any>(null); // Для зберігання subscription
@@ -143,6 +150,15 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      const clicked = localStorage.getItem('claim_has_clicked');
+      if (clicked === '1') {
+        setState(prev => ({ ...prev, hasClaimed: true }));
+      }
+    } catch {}
+  }, []);
+
   // Save notifications to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('lottery_notifications', JSON.stringify(state.notifications));
@@ -154,6 +170,63 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       notifications: prev.notifications.map(n => ({ ...n, read: true }))
     }));
   }, []);
+  const getPendingKey = (cid: string) => `linera_pending_bundles_${cid}`;
+  const getClaimedKey = (cid: string) => `linera_claimed_bundles_${cid}`;
+  const readHeights = (key: string): Set<number> => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return new Set<number>();
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return new Set<number>();
+      return new Set<number>(arr.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n)));
+    } catch { return new Set<number>(); }
+  };
+  const writeHeights = (key: string, s: Set<number>) => {
+    try { localStorage.setItem(key, JSON.stringify(Array.from(s.values()))); } catch {}
+  };
+  const refreshClaimUiFromStorage = () => {
+    const cid = (state.chainId || '').toLowerCase();
+    if (!cid) return;
+    const pending = readHeights(getPendingKey(cid));
+    const claimed = readHeights(getClaimedKey(cid));
+    const filtered = new Set<number>();
+    pending.forEach(h => { if (!claimed.has(h)) filtered.add(h); });
+    if (filtered.size !== pending.size) writeHeights(getPendingKey(cid), filtered);
+    setState(prev => ({
+      ...prev,
+      pendingBundles: filtered.size,
+      claimEnabled: filtered.size > 0
+    }));
+  };
+
+  const claimChainBalance = async () => {
+    if (!state.application) return;
+    try {
+      const mutation = `mutation { chainBalance }`;
+      await state.application.query(JSON.stringify({ query: mutation }));
+      const cid = (state.chainId || '').toLowerCase();
+      if (cid) {
+        const pKey = getPendingKey(cid);
+        const cKey = getClaimedKey(cid);
+        const pending = readHeights(pKey);
+        const claimed = readHeights(cKey);
+        const merged = new Set<number>(claimed);
+        pending.forEach(h => merged.add(h));
+        writeHeights(cKey, merged);
+        writeHeights(pKey, new Set<number>());
+      }
+      setState((prev: LineraContextType) => ({
+        ...prev,
+        hasClaimed: true,
+        claimEnabled: false,
+        pendingBundles: 0
+      }));
+      try { localStorage.setItem('claim_has_clicked', '1'); } catch {}
+    } catch {}
+  };
+  useEffect(() => {
+    refreshClaimUiFromStorage()
+  }, [state.chainId]);
 
   const toMs = (v: any): number | null => {
     try { return parseTimestamp(v) } catch { return null }
@@ -418,7 +491,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         prizePool: String(r.prize_pool),
         ticketPrice: String(r.ticket_price),
         endTime: endMs,
-        ticketsSold: Number(r.totalTicketsSold || 0),
+        ticketsSold: Number((r as any).total_tickets_sold ?? 0),
         winners,
       } as LotteryRound
     });
@@ -446,7 +519,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             prizePool: String(r.prizePool),
             ticketPrice: String(r.ticketPrice),
             endTime: endMs,
-            ticketsSold: Number(r.totalTicketsSold || 0),
+            ticketsSold: Number(r.totalTicketsSold ?? 0),
             winners: [],
           };
         });
@@ -537,7 +610,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         prizePool: String(row.prize_pool),
         ticketPrice: String(row.ticket_price),
         endTime: endMs,
-        ticketsSold: Number(row.totalTicketsSold || 0),
+        ticketsSold: Number((row as any).total_tickets_sold ?? 0),
         winners: []
       }
       setState(prev => {
@@ -738,6 +811,28 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 });
               }
             }
+
+            if (notification.reason?.NewIncomingBundle) {
+              try {
+                const cid = (state.chainId || '').toLowerCase();
+                const h = Number(notification.reason.NewIncomingBundle.height);
+                if (cid && Number.isFinite(h)) {
+                  const pKey = getPendingKey(cid);
+                  const cKey = getClaimedKey(cid);
+                  const pending = readHeights(pKey);
+                  const claimed = readHeights(cKey);
+                  if (!claimed.has(h) && !pending.has(h)) {
+                    pending.add(h);
+                    writeHeights(pKey, pending);
+                  }
+                  setState(prev => ({
+                    ...prev,
+                    pendingBundles: pending.size,
+                    claimEnabled: pending.size > 0
+                  }));
+                }
+              } catch {}
+            }
           });
 
           // Store the unsubscribe function
@@ -859,6 +954,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setActiveTab,
     connectWallet,
     purchaseTickets,
-    markAllAsRead
+    markAllAsRead,
+    claimChainBalance
   }}>{children}</LineraContext.Provider>;
 };

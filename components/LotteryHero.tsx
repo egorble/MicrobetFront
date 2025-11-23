@@ -159,7 +159,7 @@ export function LotteryHero({ round, allWinners, onBuyTicket }: LotteryHeroProps
                             </div>
                             <div className="bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
                                 <div className="text-gray-500 text-xs uppercase font-bold">Tickets Sold</div>
-                                <div className="text-xl font-bold text-gray-900">{round.ticketsSold}</div>
+                                <div className="text-xl font-bold text-gray-900">{round.ticketsSold ?? 0}</div>
                             </div>
                         </div>
 

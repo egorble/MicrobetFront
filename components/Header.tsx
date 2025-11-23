@@ -19,7 +19,11 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
     status,
     connectWallet,
     notifications,
-    markAllAsRead
+    markAllAsRead,
+    claimEnabled,
+    pendingBundles,
+    claimChainBalance,
+    hasClaimed
   } = useLinera();
   const [isConnecting, setIsConnecting] = useState(false);
   const connected = !!accountOwner && status === 'Ready';
@@ -37,6 +41,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
   const [showMintInput, setShowMintInput] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
@@ -267,6 +272,29 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
             {/* Notifications & Wallet Dropdown */}
             {connected && (
               <div className="flex items-center gap-2">
+                {/* Claim Button */}
+                <div className="relative">
+                  <Button
+                    onClick={async () => {
+                      if (!claimChainBalance || isClaiming || !claimEnabled) return;
+                      setIsClaiming(true);
+                      try {
+                        await claimChainBalance();
+                      } finally {
+                        setIsClaiming(false);
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-full ${claimEnabled ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500'} `}
+                    disabled={!claimEnabled || isClaiming}
+                  >
+                    {isClaiming ? 'Claiming...' : (hasClaimed && !claimEnabled ? 'Claimed' : 'Claim')}
+                  </Button>
+                  {(pendingBundles || 0) > 0 && claimEnabled && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full ring-2 ring-white bg-red-500 text-[10px] font-bold text-white">
+                      {(pendingBundles || 0) > 9 ? '9+' : (pendingBundles || 0)}
+                    </span>
+                  )}
+                </div>
                 {/* Notifications */}
                 <div className="relative" ref={notificationRef}>
                   <button
