@@ -22,7 +22,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
     markAllAsRead,
     claimEnabled,
     pendingBundles,
-    claimChainBalance,
+    markBundlesClaimed,
     hasClaimed
   } = useLinera();
   const [isConnecting, setIsConnecting] = useState(false);
@@ -135,6 +135,9 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
       await queryChainBalance();
       setMintAmount("");
       setShowMintInput(false);
+      if (markBundlesClaimed) {
+        markBundlesClaimed();
+      }
     } catch (error) {
       console.error('Mint error:', error);
     } finally {
@@ -159,6 +162,9 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
         await refreshBalance();
       }
       await queryChainBalance();
+      if (markBundlesClaimed) {
+        markBundlesClaimed();
+      }
     } catch (error) {
       console.error('Withdraw error:', error);
     } finally {
@@ -276,10 +282,10 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                 <div className="relative">
                   <Button
                     onClick={async () => {
-                      if (!claimChainBalance || isClaiming || !claimEnabled) return;
+                      if (!markBundlesClaimed || isClaiming || !claimEnabled) return;
                       setIsClaiming(true);
                       try {
-                        await claimChainBalance();
+                        await Promise.resolve(markBundlesClaimed());
                       } finally {
                         setIsClaiming(false);
                       }

@@ -95,6 +95,7 @@ interface LineraContextType {
   purchaseTickets?: (amountTokens: string) => Promise<void>;
   markAllAsRead?: () => void;
   claimChainBalance?: () => Promise<void>;
+  markBundlesClaimed?: () => void;
 }
 
 const LineraContext = createContext<LineraContextType>({
@@ -170,6 +171,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       notifications: prev.notifications.map(n => ({ ...n, read: true }))
     }));
   }, []);
+
   const getPendingKey = (cid: string) => `linera_pending_bundles_${cid}`;
   const getClaimedKey = (cid: string) => `linera_claimed_bundles_${cid}`;
   const readHeights = (key: string): Set<number> => {
@@ -199,29 +201,30 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }));
   };
 
+  const markBundlesClaimed = () => {
+    const cid = (state.chainId || '').toLowerCase();
+    if (!cid) return;
+    const pKey = getPendingKey(cid);
+    const cKey = getClaimedKey(cid);
+    const pending = readHeights(pKey);
+    const claimed = readHeights(cKey);
+    const merged = new Set<number>(claimed);
+    pending.forEach(h => merged.add(h));
+    writeHeights(cKey, merged);
+    writeHeights(pKey, new Set<number>());
+    setState(prev => ({
+      ...prev,
+      hasClaimed: true,
+      claimEnabled: false,
+      pendingBundles: 0
+    }));
+    try { localStorage.setItem('claim_has_clicked', '1'); } catch {}
+  };
+
   const claimChainBalance = async () => {
     if (!state.application) return;
     try {
-      const mutation = `mutation { chainBalance }`;
-      await state.application.query(JSON.stringify({ query: mutation }));
-      const cid = (state.chainId || '').toLowerCase();
-      if (cid) {
-        const pKey = getPendingKey(cid);
-        const cKey = getClaimedKey(cid);
-        const pending = readHeights(pKey);
-        const claimed = readHeights(cKey);
-        const merged = new Set<number>(claimed);
-        pending.forEach(h => merged.add(h));
-        writeHeights(cKey, merged);
-        writeHeights(pKey, new Set<number>());
-      }
-      setState((prev: LineraContextType) => ({
-        ...prev,
-        hasClaimed: true,
-        claimEnabled: false,
-        pendingBundles: 0
-      }));
-      try { localStorage.setItem('claim_has_clicked', '1'); } catch {}
+      markBundlesClaimed();
     } catch {}
   };
   useEffect(() => {
@@ -692,6 +695,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             }
           `;
           await btcApplication.query(JSON.stringify({ query: mutation }));
+          markBundlesClaimed();
           const balanceAfterMint = await queryBalance(btcApplication, owner);
           setState(prev => ({
             ...prev,
@@ -755,6 +759,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const targetOwner = import.meta.env.VITE_LOTTERY_TARGET_OWNER || '';
     const mutation = `mutation { transfer(owner: "${state.accountOwner}", amount: "${amountTokens}", targetAccount: { chainId: "${chainId}", owner: "${targetOwner}" }, purchaseTickets: true) }`;
     await state.lotteryApplication.query(JSON.stringify({ query: mutation }));
+    markBundlesClaimed();
   };
 
   // Окремий useEffect для налаштування subscription
@@ -955,6 +960,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     connectWallet,
     purchaseTickets,
     markAllAsRead,
-    claimChainBalance
+    claimChainBalance,
+    markBundlesClaimed
   }}>{children}</LineraContext.Provider>;
 };

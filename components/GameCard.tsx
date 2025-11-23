@@ -30,7 +30,7 @@ interface GameCardProps {
 }
 
 export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
-  const { btcApplication, ethApplication, accountOwner, refreshBalance } = useLinera();
+  const { btcApplication, ethApplication, accountOwner, refreshBalance, markBundlesClaimed } = useLinera();
   const [lightningActive, setLightningActive] = useState(false);
 
   // Flip state
@@ -114,6 +114,10 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
 
       if (refreshBalance) {
         await refreshBalance();
+      }
+
+      if (markBundlesClaimed) {
+        markBundlesClaimed();
       }
 
       // Flip back after success
