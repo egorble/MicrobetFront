@@ -111,7 +111,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
-
+  const notifiedWinsRef = useRef<Set<string>>(new Set()); // Track notified wins
 
   const toMs = (v: any): number | null => {
     try { return parseTimestamp(v) } catch { return null }
@@ -298,13 +298,31 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (mappedWinners.length >= 50) return;
 
       seenGlobalTickets.add(uniqueKey);
-      mappedWinners.push({
+
+      const winnerObj = {
         roundId: String(roundId),
         ticketId: ticketId,
         owner: String(w.source_chain_id || 'unknown'),
         amount: String(w.prize_amount),
         createdAt: createdAt
-      });
+      };
+
+      mappedWinners.push(winnerObj);
+
+      // Check for personal win
+      if (state.chainId && winnerObj.owner === state.chainId) {
+        const winKey = `win-${uniqueKey}`;
+        if (!notifiedWinsRef.current.has(winKey)) {
+          notifiedWinsRef.current.add(winKey);
+          const timestamp = new Date().toLocaleTimeString();
+          const notificationText = `[${timestamp}] 🎉 You won ${winnerObj.amount} LNRA in Round #${winnerObj.roundId}! (Ticket #${winnerObj.ticketId})`;
+
+          setState(prev => ({
+            ...prev,
+            notifications: [...(prev.notifications || []), notificationText].slice(-5)
+          }));
+        }
+      }
     });
 
     // Sync with GraphQL if available
@@ -323,7 +341,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         prizePool: String(r.prize_pool),
         ticketPrice: String(r.ticket_price),
         endTime: endMs,
-        ticketsSold: Number(r.total_tickets_sold || 0),
+        ticketsSold: Number(r.totalTicketsSold || 0),
         winners,
       } as LotteryRound
     });
@@ -412,7 +430,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const wallet = await faucet.createWallet();
       const chainId = await faucet.claimChain(wallet, owner);
       setState(prev => ({ ...prev, status: 'Creating Client' }));
-      const clientInstance = await new linera.Client(wallet, signer, false);
+      const clientInstance = await new linera.Client(wallet, signer, true);
       const btcApplication = await clientInstance.frontend().application(btcApplicationId);
       const ethApplication = await clientInstance.frontend().application(ethApplicationId);
       const lotteryApplication = lotteryApplicationId ? await clientInstance.frontend().application(lotteryApplicationId) : undefined;
@@ -549,13 +567,13 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             }
 
             // Add notification to the list for display
-            const timestamp = new Date().toLocaleTimeString();
-            const notificationText = `[${timestamp}] ${notification.reason?.NewBlock ? 'New Block' : 'Chain notification'}: ${JSON.stringify(notification)}`;
+            // const timestamp = new Date().toLocaleTimeString();
+            // const notificationText = `[${timestamp}] ${notification.reason?.NewBlock ? 'New Block' : 'Chain notification'}: ${JSON.stringify(notification)}`;
 
-            setState(prev => ({
-              ...prev,
-              notifications: [...(prev.notifications || []), notificationText].slice(-5) // Keep last 5
-            }));
+            // setState(prev => ({
+            //   ...prev,
+            //   notifications: [...(prev.notifications || []), notificationText].slice(-5) // Keep last 5
+            // }));
           });
 
           // Store the unsubscribe function

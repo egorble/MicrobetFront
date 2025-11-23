@@ -5,6 +5,13 @@ const config = require('./config')
 const fs = require('fs')
 const path = require('path')
 
+function now() { return new Date().toISOString() }
+function log() { const args = Array.from(arguments); console.log(`[${now()}] [lottery-sync]`, ...args) }
+function warn() { const args = Array.from(arguments); console.warn(`[${now()}] [lottery-sync]`, ...args) }
+function error() { const args = Array.from(arguments); console.error(`[${now()}] [lottery-sync]`, ...args) }
+function compactStr(v) { return String(v).replace(/\s+/g, ' ').trim() }
+function trunc(s, n = 1000) { try { const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t } catch { return '' } }
+
 function loadLocalEnv() {
   const dirs = [__dirname, path.resolve(__dirname, '..')]
   const files = ['.env', '.env.local']
@@ -46,9 +53,8 @@ function endpointToWsUrl(endpointUrl) {
 }
 
 async function executeQuery(endpoint, query) {
-  const t = new Date().toISOString()
-  const compact = String(query).replace(/\s+/g, ' ').trim()
-  console.log(`[${t}] [lottery-sync] POST ${endpoint} query: ${compact}`)
+  const q = compactStr(query)
+  log('POST', endpoint, 'query:', q)
   try {
     const res = await axios.post(endpoint, { query }, {
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -56,18 +62,20 @@ async function executeQuery(endpoint, query) {
       validateStatus: () => true
     })
     if (res.status < 200 || res.status >= 300) {
-      console.error(`[${t}] [lottery-sync] HTTP ${res.status} ${res.statusText}`)
+      error('HTTP', res.status, res.statusText)
       return {}
     }
-    const data = res.data?.data || {}
-    if (res.data?.errors) {
-      console.error(`[${t}] [lottery-sync] GraphQL errors:`, JSON.stringify(res.data.errors))
+    const raw = res.data
+    if (raw?.errors) {
+      error('GraphQL errors:', trunc(JSON.stringify(raw.errors)))
     }
+    const data = raw?.data || {}
     const keys = Object.keys(data)
-    console.log(`[${t}] [lottery-sync] RESPONSE keys=${keys.join(',')} size=${JSON.stringify(data).length}`)
+    log('RESPONSE keys=' + keys.join(',') + ' size=' + JSON.stringify(data).length)
+    log('RESPONSE preview=', trunc(JSON.stringify(raw)))
     return data
   } catch (err) {
-    console.error(`[${t}] [lottery-sync] POST failed:`, err.message || err)
+    error('POST failed:', err.message || err)
     return {}
   }
 }
@@ -110,7 +118,7 @@ function toIsoSafe(v) {
 async function fetchAllRounds() {
   const data = await executeQuery(LOTTERY_HTTP, ALL_ROUNDS_QUERY)
   const rounds = data?.allRounds || []
-  console.log(`[${new Date().toISOString()}] [lottery-sync] allRounds count=${rounds.length}`)
+  log('allRounds count=', rounds.length)
   return rounds
 }
 
@@ -140,7 +148,7 @@ async function fetchRoundWinners(roundId) {
   const q = `query { roundWinners(roundId: ${Number(roundId)}) { ticketNumber sourceChainId prizeAmount } }`
   const data = await executeQuery(LOTTERY_HTTP, q)
   const winners = data?.roundWinners || []
-  console.log(`[${new Date().toISOString()}] [lottery-sync] roundWinners roundId=${roundId} count=${winners.length}`)
+  log('roundWinners roundId=' + roundId + ' count=' + winners.length)
   return winners
 }
 
@@ -148,20 +156,23 @@ async function upsertWinners(roundId) {
   if (!supabase) throw new Error('Supabase not configured')
   const winners = await fetchRoundWinners(roundId)
   if (!winners || winners.length === 0) return
-  for (const w of winners) {
-    const row = mapWinner(roundId, w)
-    const { error } = await supabase
-      .from('lottery_winners')
-      .upsert([row], { onConflict: 'round_id,ticket_number,source_chain_id' })
-      .select()
-    if (error) {
-      try { console.error('lottery_winners upsert error', error.message) } catch {}
+  const rows = winners.map(w => mapWinner(roundId, w))
+  const { error: batchErr } = await supabase
+    .from('lottery_winners')
+    .upsert(rows, { onConflict: 'round_id,ticket_number,source_chain_id' })
+  if (batchErr) {
+    error('lottery_winners batch upsert error', batchErr.message || batchErr)
+    for (const row of rows) {
+      const { error: singleErr } = await supabase
+        .from('lottery_winners')
+        .upsert([row], { onConflict: 'round_id,ticket_number,source_chain_id' })
+      if (singleErr) { error('lottery_winners upsert error', singleErr.message || singleErr) }
     }
-    try { console.log(`[${new Date().toISOString()}] [lottery-sync] upsert winner round=${row.round_id} ticket=${row.ticket_number} source=${row.source_chain_id} amount=${row.prize_amount}`) } catch {}
   }
+  for (const row of rows) { log('upsert winner round=' + row.round_id + ' ticket=' + row.ticket_number + ' source=' + row.source_chain_id + ' amount=' + row.prize_amount) }
 }
 
-function mapRound(r) {
+function mapRoundBasic(r) {
   return {
     id: Number(r.id),
     status: String(r.status),
@@ -205,7 +216,7 @@ function mapRound(r) {
   const closedMs = toMsRaw(r.closedAt)
   const createdIso = createdMs ? new Date(createdMs).toISOString() : null
   const closedIso = closedMs ? new Date(closedMs).toISOString() : null
-  try { console.log(`[lottery-sync] mapRound id=${r.id} status=${r.status} rawCreated=${r.createdAt} rawClosed=${r.closedAt} createdMs=${createdMs} closedMs=${closedMs} now=${Date.now()} diffCreatedMs=${createdMs != null ? Date.now() - createdMs : 'n/a'}`) } catch {}
+  try { log('mapRound id=' + r.id + ' status=' + r.status + ' rawCreated=' + r.createdAt + ' rawClosed=' + r.closedAt + ' createdMs=' + createdMs + ' closedMs=' + closedMs + ' now=' + Date.now() + ' diffCreatedMs=' + (createdMs != null ? (Date.now() - createdMs) : 'n/a')) } catch {}
   return {
     id: Number(r.id),
     status: String(r.status),
@@ -221,58 +232,83 @@ async function upsertRounds(rounds) {
   if (!supabase) throw new Error('Supabase not configured')
   const payload = rounds.map(mapRound)
   if (!payload.length) return
-  for (const row of payload) {
-    const { error } = await supabase.from('lottery_rounds').upsert([row], { onConflict: 'id' })
-    try { console.log(`[lottery-sync] upsert round id=${row.id} status=${row.status} created_at=${row.created_at} closed_at=${row.closed_at}`) } catch {}
-    if (error) {
-      try { console.error('[lottery-sync] upsert round error', error.message) } catch {}
+  const { error: batchErr } = await supabase.from('lottery_rounds').upsert(payload, { onConflict: 'id' })
+  if (batchErr) {
+    error('upsert rounds batch error', batchErr.message || batchErr)
+    for (const row of payload) {
+      const { error: singleErr } = await supabase.from('lottery_rounds').upsert([row], { onConflict: 'id' })
+      if (singleErr) { error('upsert round error', singleErr.message || singleErr) }
     }
   }
+  for (const row of payload) { log('upsert round id=' + row.id + ' status=' + row.status + ' created_at=' + row.created_at + ' closed_at=' + row.closed_at) }
 }
 
+let running = false
+let scheduled = false
 async function handleEvent() {
-  const rounds = await fetchAllRounds()
-  await upsertRounds(rounds)
-  const target = latestTargetRound(rounds)
-  console.log(`[${new Date().toISOString()}] [lottery-sync] latest target round id=${target?.id} status=${target?.status}`)
-  if (target?.id != null) {
-    await upsertWinners(target.id)
+  if (running) { scheduled = true; return }
+  running = true
+  try {
+    const rounds = await fetchAllRounds()
+    await upsertRounds(rounds)
+    const target = latestTargetRound(rounds)
+    log('latest target round id=' + (target?.id ?? 'null') + ' status=' + (target?.status ?? 'null'))
+    if (target?.id != null) {
+      await upsertWinners(target.id)
+    }
+  } catch (e) {
+    error('handleEvent error', e?.message || e)
+  } finally {
+    running = false
+    if (scheduled) { scheduled = false; setImmediate(handleEvent) }
   }
 }
 
 function makeWs(url, chainId, onEvent) {
   let ws
   let attempts = 0
+  let pingTimer = null
   function connect() {
     attempts += 1
     ws = new WebSocket(url, 'graphql-transport-ws')
     ws.onopen = () => {
       attempts = 0
+      log('WS open', url)
       ws.send(JSON.stringify({ type: 'connection_init' }))
+      if (pingTimer) clearInterval(pingTimer)
+      pingTimer = setInterval(() => { try { ws.send(JSON.stringify({ type: 'ping' })) } catch {} }, 30000)
     }
     ws.onmessage = async (ev) => {
-      const msg = JSON.parse(ev.data)
-      try { console.log(`[${new Date().toISOString()}] [lottery-sync] WS message type=${msg.type} payload=${JSON.stringify(msg.payload)}`) } catch {}
+      let msg
+      try { msg = JSON.parse(ev.data) } catch { msg = { type: 'unknown' } }
+      try { log('WS message type=' + msg.type + ' payload=' + (msg.payload ? 'present' : 'undefined')) } catch {}
       if (msg.type === 'connection_ack') {
         ws.send(JSON.stringify({ id: 'lottery_sync', type: 'subscribe', payload: { query: `subscription { notifications(chainId: "${chainId}") }` } }))
+        log('WS subscribed chainId=' + chainId)
       } else if (msg.type === 'next') {
         onEvent()
+      } else if (msg.type === 'pong') {
+        log('WS pong')
       }
     }
-    ws.onclose = () => {
-      const delay = Math.min(1000 * Math.pow(2, attempts), 30000)
+    ws.onclose = (code, reason) => {
+      const delay = Math.min(1000 * Math.pow(2, attempts), 30000) + Math.floor(Math.random() * 500)
+      warn('WS closed code=' + code + ' reason=' + (reason || '') + ' reconnect in ' + delay + 'ms')
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
       setTimeout(connect, delay)
     }
-    ws.onerror = () => {}
+    ws.onerror = (err) => { error('WS error:', err?.message || err) }
   }
   connect()
 }
 
 async function main() {
+  log('daemon start')
   await handleEvent()
   const chainId = extractChainId(LOTTERY_HTTP)
   const wsUrl = endpointToWsUrl(LOTTERY_HTTP)
   makeWs(wsUrl, chainId, handleEvent)
+  setInterval(() => { handleEvent().catch(() => {}) }, 60000)
 }
 
 main().catch(() => { process.exit(1) })
