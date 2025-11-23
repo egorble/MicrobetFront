@@ -127,7 +127,7 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Key Metrics Card */}
-                <div className="bg-black text-white rounded-3xl p-8 shadow-2xl flex flex-col justify-between relative overflow-hidden min-h-[300px]">
+                <div className="bg-black dark:bg-zinc-950 text-white rounded-3xl p-8 shadow-2xl flex flex-col justify-between relative overflow-hidden min-h-[300px]">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-red-600 rounded-full blur-[100px] opacity-20 -mr-16 -mt-16 pointer-events-none"></div>
 
                     <div>
@@ -167,18 +167,18 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                 </div>
 
                 {/* Trend Chart Card */}
-                <div className="lg:col-span-2 bg-white border border-gray-200 rounded-3xl p-8 shadow-sm flex flex-col min-h-[300px] relative overflow-hidden">
+                <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm flex flex-col min-h-[300px] relative overflow-hidden">
                     <div className="flex items-center justify-between mb-8 relative z-10">
                         <div>
-                            <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                            <h3 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-3">
                                 <TrendingUp className="w-6 h-6 text-red-600" />
                                 Prize Pool Trend
                             </h3>
-                            <p className="text-sm text-gray-500 mt-1">Volume history of the last 12 rounds</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Volume history of the last 12 rounds</p>
                         </div>
                         <div className="text-right hidden sm:block">
-                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Last Round</div>
-                            <div className="text-xl font-black text-gray-900">
+                            <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Last Round</div>
+                            <div className="text-xl font-black text-gray-900 dark:text-white">
                                 {stats.chartData[stats.chartData.length - 1]?.val || 0} LNRA
                             </div>
                         </div>
@@ -186,7 +186,7 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
 
                     <div className="flex-1 w-full relative h-40 flex gap-4">
                         {/* Y-Axis Labels */}
-                        <div className="flex flex-col justify-between text-[10px] font-bold text-gray-400 py-2 text-right min-w-[40px]">
+                        <div className="flex flex-col justify-between text-[10px] font-bold text-gray-400 dark:text-gray-500 py-2 text-right min-w-[40px]">
                             <div>{Math.round(stats.maxChartVal)}</div>
                             <div>{Math.round(stats.maxChartVal * 0.75)}</div>
                             <div>{Math.round(stats.maxChartVal * 0.5)}</div>
@@ -198,11 +198,11 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                         <div className="flex-1 relative">
                             {/* Grid Lines (Solid now, not dashed) */}
                             <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                                <div className="w-full h-px bg-gray-100"></div>
-                                <div className="w-full h-px bg-gray-100"></div>
-                                <div className="w-full h-px bg-gray-100"></div>
-                                <div className="w-full h-px bg-gray-100"></div>
-                                <div className="w-full h-px bg-gray-100"></div>
+                                <div className="w-full h-px bg-gray-100 dark:bg-zinc-800"></div>
+                                <div className="w-full h-px bg-gray-100 dark:bg-zinc-800"></div>
+                                <div className="w-full h-px bg-gray-100 dark:bg-zinc-800"></div>
+                                <div className="w-full h-px bg-gray-100 dark:bg-zinc-800"></div>
+                                <div className="w-full h-px bg-gray-100 dark:bg-zinc-800"></div>
                             </div>
 
                             {/* Wavy Chart SVG */}
@@ -238,18 +238,18 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
 
                                             {/* The Point Dot */}
                                             <div
-                                                className="w-2 h-2 bg-white border-[3px] border-red-600 rounded-full absolute transition-all duration-300 opacity-0 scale-0 group-hover:opacity-100 group-hover:scale-100 z-10"
+                                                className="w-2 h-2 bg-white dark:bg-zinc-900 border-[3px] border-red-600 rounded-full absolute transition-all duration-300 opacity-0 scale-0 group-hover:opacity-100 group-hover:scale-100 z-10"
                                                 style={{ top: `${y}%`, transform: 'translateY(-50%)' }}
                                             ></div>
 
                                             {/* Tooltip */}
                                             {d.id !== '?' && (
                                                 <div
-                                                    className="absolute bg-black text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-lg"
+                                                    className="absolute bg-black dark:bg-zinc-950 text-white text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-lg border border-zinc-800"
                                                     style={{ top: `${y}%`, transform: 'translateY(-150%)' }}
                                                 >
                                                     {d.val} LNRA
-                                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-black rotate-45"></div>
+                                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-black dark:bg-zinc-950 rotate-45 border-r border-b border-zinc-800"></div>
                                                 </div>
                                             )}
                                         </div>
@@ -262,13 +262,13 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
             </div>
 
             {/* Full Width Live Feed */}
-            <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="px-8 py-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                    <h3 className="text-lg font-black text-gray-900 flex items-center gap-3">
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden flex flex-col">
+                <div className="px-8 py-6 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
+                    <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-3">
                         <Clock className="w-5 h-5 text-red-600" />
                         Live Winners Feed
                     </h3>
-                    <div className="flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-xs font-bold uppercase tracking-wide border border-red-100">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-full text-xs font-bold uppercase tracking-wide border border-red-100 dark:border-red-900/30">
                         <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -280,34 +280,34 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                 <div className="p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         {stats.feed.length === 0 ? (
-                            <div className="col-span-full py-12 flex flex-col items-center justify-center text-gray-400 space-y-4">
+                            <div className="col-span-full py-12 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 space-y-4">
                                 <Trophy className="w-16 h-16 opacity-10" />
                                 <p className="font-medium">Waiting for the first winner...</p>
                             </div>
                         ) : (
                             stats.feed.map((item, idx) => (
-                                <div key={`${item.winner.ticketId}-${idx}`} className="group bg-white border border-gray-100 rounded-2xl p-4 hover:border-red-600 hover:shadow-md transition-all duration-300 flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center font-black text-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
+                                <div key={`${item.winner.ticketId}-${idx}`} className="group bg-white dark:bg-zinc-950 border border-gray-100 dark:border-zinc-800 rounded-2xl p-4 hover:border-red-600 dark:hover:border-red-600 hover:shadow-md transition-all duration-300 flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-gray-50 dark:bg-zinc-900 text-gray-400 dark:text-gray-500 flex items-center justify-center font-black text-lg group-hover:bg-red-600 group-hover:text-white transition-colors">
                                         <Ticket className="w-5 h-5" />
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between mb-1">
-                                            <span className="font-black text-gray-900 text-lg">{item.winner.amount} LNRA</span>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                            <span className="font-black text-gray-900 dark:text-white text-lg">{item.winner.amount} LNRA</span>
+                                            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                                                 {formatLocalTime(item.time)}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs text-gray-500 font-medium">
-                                            <span className="font-mono text-gray-400">
+                                        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                            <span className="font-mono text-gray-400 dark:text-gray-500">
                                                 {item.winner.owner.slice(0, 6)}...{item.winner.owner.slice(-4)}
                                             </span>
-                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-zinc-700"></span>
                                             <span className="flex items-center gap-1">
                                                 <Ticket className="w-3 h-3" /> #{item.winner.ticketId}
                                             </span>
-                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                            <span className="flex items-center gap-1 text-gray-400">
+                                            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-zinc-700"></span>
+                                            <span className="flex items-center gap-1 text-gray-400 dark:text-gray-500">
                                                 R#{item.roundId}
                                             </span>
                                         </div>
@@ -319,7 +319,7 @@ export function LotteryHistory({ rounds, latest }: LotteryHistoryProps) {
                 </div>
 
                 {stats.feed.length > 0 && (
-                    <div className="px-8 py-4 bg-gray-50 border-t border-gray-100 text-center text-xs font-medium text-gray-400">
+                    <div className="px-8 py-4 bg-gray-50 dark:bg-zinc-900 border-t border-gray-100 dark:border-zinc-800 text-center text-xs font-medium text-gray-400 dark:text-gray-500">
                         Showing last {stats.feed.length} winners
                     </div>
                 )}

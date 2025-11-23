@@ -1,8 +1,8 @@
-import { TrendingUp, Wallet, RefreshCw, Clock, ChevronDown, Plus, Minus, Ticket } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, ChevronDown, Plus, Minus, Ticket, Sun, Moon } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
 import { useState, useEffect, useRef } from "react";
-import { getUserTimezone, formatLocalTime } from "../utils/timeUtils";
+import { useTheme } from "./ThemeProvider";
 
 interface HeaderProps {
   gameMode: 'prediction' | 'lottery';
@@ -24,11 +24,10 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
     markBundlesClaimed,
     hasClaimed
   } = useLinera();
+  const { theme, setTheme } = useTheme();
   const [isConnecting, setIsConnecting] = useState(false);
   const connected = !!accountOwner && status === 'Ready';
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [timezone, setTimezone] = useState(getUserTimezone());
 
   // Dropdown state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -40,15 +39,6 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isClaiming, setIsClaiming] = useState(false);
 
-
-  // Оновлюємо поточний час кожну секунду
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
 
   // Закриваємо dropdown при кліку поза ним
   useEffect(() => {
@@ -71,11 +61,6 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
       queryChainBalance();
     }
   }, [isDropdownOpen, application, accountOwner]);
-
-  // Отримуємо інформацію про часовий пояс при завантаженні
-  useEffect(() => {
-    setTimezone(getUserTimezone());
-  }, []);
 
   // Функція для запиту chainBalance
   const queryChainBalance = async () => {
@@ -193,7 +178,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
+    <header className="bg-white dark:bg-zinc-950 border-b border-gray-200 dark:border-zinc-800 shadow-sm sticky top-0 z-40 transition-colors duration-300">
       <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="flex items-center justify-between">
           {/* Left side - MicroBet Title with Logo */}
@@ -202,16 +187,16 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
               <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-lg sm:text-2xl font-bold text-gray-800">MicroBet</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white">MicroBet</h1>
             </div>
 
             {/* Game Mode Switcher */}
-            <div className="flex bg-gray-100 p-1 rounded-lg ml-2">
+            <div className="flex bg-gray-100 dark:bg-zinc-900 p-1 rounded-lg ml-2">
               <button
                 onClick={() => setGameMode('prediction')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'prediction'
-                  ? 'bg-white shadow-sm text-gray-900'
-                  : 'text-gray-500 hover:text-gray-900'
+                  ? 'bg-white dark:bg-zinc-800 shadow-sm text-gray-900 dark:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >
                 <TrendingUp className="w-3 h-3" />
@@ -220,8 +205,8 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
               <button
                 onClick={() => setGameMode('lottery')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'lottery'
-                  ? 'bg-white shadow-sm text-purple-700'
-                  : 'text-gray-500 hover:text-gray-900'
+                  ? 'bg-white dark:bg-zinc-800 shadow-sm text-purple-700 dark:text-purple-400'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >
                 <Ticket className="w-3 h-3" />
@@ -233,18 +218,6 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
 
           {/* Right side - Actions and Wallet */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Current Time and Timezone - Hidden on mobile */}
-            <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-full border border-gray-200">
-              <Clock className="w-4 h-4 text-gray-600" />
-              <div className="text-sm">
-                <div className="text-gray-800 font-medium">
-                  {formatLocalTime(currentTime)}
-                </div>
-                <div className="text-xs text-gray-500">
-                  {timezone.offsetString}
-                </div>
-              </div>
-            </div>
 
             {/* Connect Wallet Button (shown when not connected) */}
             {!connected && (
@@ -267,10 +240,10 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
 
             {/* Notifications & Wallet Dropdown */}
             {connected && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {/* Claim Button */}
                 <div className="relative">
-                  <Button
+                  <button
                     onClick={async () => {
                       if (!claimChainBalance || isClaiming || !claimEnabled) return;
                       setIsClaiming(true);
@@ -280,84 +253,107 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                         setIsClaiming(false);
                       }
                     }}
-                    className={`px-3 py-2 rounded-full ${claimEnabled ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500'} `}
                     disabled={!claimEnabled || isClaiming}
+                    className={`
+                      relative flex items-center justify-center px-4 h-10 rounded-full font-medium text-sm transition-all duration-200
+                      ${claimEnabled
+                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-md hover:shadow-lg active:scale-95'
+                        : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed border border-gray-200 dark:border-zinc-700'
+                      }
+                    `}
                   >
-                    {isClaiming ? 'Claiming...' : (hasClaimed && !claimEnabled ? 'Claimed' : 'Claim')}
-                  </Button>
+                    {isClaiming ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <span>{hasClaimed && !claimEnabled ? 'Claimed' : 'Claim'}</span>
+                    )}
+                  </button>
+
                   {(pendingBundles || 0) > 0 && claimEnabled && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full ring-2 ring-white bg-red-500 text-[10px] font-bold text-white">
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center h-5 w-5 rounded-full ring-2 ring-white dark:ring-zinc-950 bg-red-500 text-[10px] font-bold text-white shadow-sm animate-bounce">
                       {(pendingBundles || 0) > 9 ? '9+' : (pendingBundles || 0)}
                     </span>
                   )}
                 </div>
- 
+
 
                 {/* Wallet Dropdown */}
                 <div className="relative" ref={dropdownRef}>
                   <div
-                    className="flex items-center gap-1 sm:gap-2 bg-red-50 px-2 sm:px-4 py-2 rounded-full border border-red-200 cursor-pointer hover:bg-red-100 transition-colors touch-target"
+                    className={`
+                      flex items-center gap-3 px-4 h-10 rounded-full cursor-pointer transition-all duration-200 border
+                      ${isDropdownOpen
+                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 ring-2 ring-red-100 dark:ring-red-900/30'
+                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50/50 dark:hover:bg-red-900/10'
+                      }
+                    `}
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   >
-                    <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-                    <div className="hidden sm:block">
-                      <div className="text-red-600 text-sm">
-                        {loading ? "Loading..." : `${formatBalance(balance)} LNRA`}
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                      <Wallet className="w-3.5 h-3.5" />
+                    </div>
+
+                    <div className="hidden sm:flex flex-col items-start">
+                      <div className="text-gray-900 dark:text-gray-100 text-sm font-semibold leading-none mb-0.5">
+                        {loading ? "..." : `${formatBalance(balance)} LNRA`}
                       </div>
-                      <div className="text-xs text-red-500">
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-none">
                         {accountOwner ? `${accountOwner.slice(0, 6)}...${accountOwner.slice(-4)}` : "WALLET"}
                       </div>
                     </div>
+
                     <div className="sm:hidden">
-                      <div className="text-red-600 text-xs font-medium">
+                      <div className="text-gray-900 dark:text-gray-100 text-xs font-semibold">
                         {loading ? "..." : formatBalance(balance)}
                       </div>
                     </div>
-                    <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-red-600 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+
+                    <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-red-500' : ''}`} />
                   </div>
 
                   {/* Dropdown Menu */}
                   {isDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-w-[calc(100vw-2rem)]">
-                      <div className="p-4">
+                    <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black ring-opacity-5 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="p-5">
                         {/* Balances */}
-                        <div className="space-y-3 mb-4">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Owner Balance:</span>
-                            <span className="font-medium text-gray-900">{formatBalance(balance)} LNRA</span>
+                        <div className="space-y-3 mb-5">
+                          <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800">
+                            <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Owner Balance</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{formatBalance(balance)} LNRA</span>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Chain Balance:</span>
-                            <span className="font-medium text-gray-900">{formatBalance(chainBalance)} LNRA</span>
+                          <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-800">
+                            <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Chain Balance</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{formatBalance(chainBalance)} LNRA</span>
                           </div>
                         </div>
 
-                        <div className="border-t border-gray-200 pt-4 space-y-3">
+                        <div className="space-y-3">
                           {/* Mint Section */}
                           <div>
                             {!showMintInput ? (
                               <Button
                                 onClick={() => setShowMintInput(true)}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white"
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium h-10 rounded-lg shadow-sm"
                                 disabled={isMinting}
                               >
                                 <Plus className="w-4 h-4 mr-2" />
                                 Mint Tokens
                               </Button>
                             ) : (
-                              <div className="space-y-2">
+                              <div className="space-y-2 bg-gray-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-gray-200 dark:border-zinc-800">
                                 <input
                                   type="number"
                                   value={mintAmount}
                                   onChange={(e) => setMintAmount(e.target.value)}
-                                  placeholder="Enter amount to mint"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                  placeholder="Amount"
+                                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-700 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white dark:bg-zinc-900 text-gray-900 dark:text-white"
+                                  autoFocus
                                 />
                                 <div className="flex gap-2">
                                   <Button
                                     onClick={handleMint}
                                     disabled={isMinting || !mintAmount}
-                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white h-8 text-xs"
                                   >
                                     {isMinting ? "Minting..." : "Confirm"}
                                   </Button>
@@ -367,7 +363,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                                       setMintAmount("");
                                     }}
                                     variant="outline"
-                                    className="flex-1"
+                                    className="flex-1 h-8 text-xs bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-700"
                                   >
                                     Cancel
                                   </Button>
@@ -380,7 +376,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                           <Button
                             onClick={handleWithdraw}
                             disabled={isWithdrawing}
-                            className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                            className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium h-10 rounded-lg shadow-sm"
                           >
                             <Minus className="w-4 h-4 mr-2" />
                             {isWithdrawing ? "Withdrawing..." : "Withdraw"}
@@ -391,7 +387,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                             onClick={handleRefreshBalance}
                             disabled={isRefreshing || loading}
                             variant="outline"
-                            className="w-full"
+                            className="w-full h-10 rounded-lg border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-600 dark:text-gray-400"
                           >
                             <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                             {isRefreshing ? "Refreshing..." : "Refresh Balance"}
@@ -404,17 +400,19 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
               </div>
             )}
 
-            {/* Action buttons - Hidden on mobile */}
-            <div className="hidden sm:flex items-center gap-2">
-
-
-              <Button variant="outline" size="icon" className="rounded-full">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 1v6m0 6v6" />
-                </svg>
-              </Button>
-            </div>
+            {/* Theme Toggle */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="ml-2 rounded-full w-9 h-9 border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </Button>
           </div>
         </div>
       </div>

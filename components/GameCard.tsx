@@ -145,7 +145,7 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
       <div className={`relative w-full h-full transition-all duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
 
         {/* FRONT FACE */}
-        <div className="relative w-full h-full backface-hidden bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border border-gray-200 hover:shadow-xl transition-shadow card-mobile">
+        <div className="relative w-full h-full backface-hidden bg-white dark:bg-zinc-950 rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border border-gray-200 dark:border-zinc-800 hover:shadow-xl transition-all duration-300 card-mobile">
           <LightningAnimation
             isActive={lightningActive}
             onComplete={handleLightningComplete}
@@ -153,19 +153,19 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
           {/* Header */}
           <div className={`px-3 sm:px-4 py-2 sm:py-3 ${isLive ? "bg-red-600" :
             isNext ? "bg-red-500" :
-              isExpired ? "bg-gray-500" :
-                "bg-gray-100"
+              isExpired ? "bg-gray-500 dark:bg-zinc-700" :
+                "bg-gray-100 dark:bg-zinc-800"
             }`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {isLive && (
                   <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
                 )}
-                <span className={`font-medium ${isLater ? "text-gray-600 text-sm" : "text-white text-sm"}`}>
+                <span className={`font-medium ${isLater ? "text-gray-600 dark:text-gray-300 text-sm" : "text-white text-sm"}`}>
                   {game.status}
                 </span>
               </div>
-              <span className={`text-xs font-mono ${isLater ? "text-gray-500" : "text-white opacity-90"}`}>
+              <span className={`text-xs font-mono ${isLater ? "text-gray-500 dark:text-gray-400" : "text-white opacity-90"}`}>
                 {game.id}
               </span>
             </div>
@@ -188,31 +188,31 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
             {isLater ? (
               // Later card - simplified
               <div className="text-center py-4 sm:py-6">
-                <div className="text-gray-400 text-base font-medium mb-3">UP</div>
+                <div className="text-gray-400 dark:text-gray-500 text-base font-medium mb-3">UP</div>
                 <div className="mb-3">
-                  <div className="text-gray-500 text-xs">Entry starts</div>
-                  <div className="text-gray-900 text-sm font-medium">{game.entryStarts || 'TBD'}</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs">Entry starts</div>
+                  <div className="text-gray-900 dark:text-white text-sm font-medium">{game.entryStarts || 'TBD'}</div>
                 </div>
-                <div className="text-gray-400 text-base font-medium">DOWN</div>
+                <div className="text-gray-400 dark:text-gray-500 text-base font-medium">DOWN</div>
               </div>
             ) : (
               <>
                 {/* UP Section */}
                 <div className="text-center mb-3">
                   <div className={`text-lg font-bold mb-1 ${isExpired ?
-                    (game.result === 'UP' ? "text-green-500" : "text-gray-400") :
+                    (game.result === 'UP' ? "text-green-500" : "text-gray-400 dark:text-gray-600") :
                     "text-green-500"
                     }`}>UP</div>
-                  <div className="text-gray-500 text-xs">1.00x Payout</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs">1.00x Payout</div>
                 </div>
 
                 {/* Action Buttons or Price Info */}
                 {isNext ? (
                   <div className="space-y-3 mb-3">
-                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="bg-gray-50 dark:bg-zinc-900 rounded-lg p-3 border border-gray-200 dark:border-zinc-800">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-600 font-medium text-sm">Prize Pool:</span>
-                        <span className="text-gray-900 font-bold text-sm">{game.prizePool}</span>
+                        <span className="text-gray-600 dark:text-gray-400 font-medium text-sm">Prize Pool:</span>
+                        <span className="text-gray-900 dark:text-white font-bold text-sm">{game.prizePool}</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -233,46 +233,46 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
                 ) : isExpired ? (
                   <div className="space-y-2 mb-3">
                     {game.lastPrice && (
-                      <div className="bg-gray-50 rounded-lg px-2 sm:px-3 py-2 border border-gray-200">
-                        <div className="text-gray-500 text-xs mb-0.5">RESOLVED PRICE</div>
-                        <div className="text-gray-600 text-xs sm:text-sm">{game.lastPrice}</div>
+                      <div className="bg-gray-50 dark:bg-zinc-900 rounded-lg px-2 sm:px-3 py-2 border border-gray-200 dark:border-zinc-800">
+                        <div className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">RESOLVED PRICE</div>
+                        <div className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm">{game.lastPrice}</div>
                       </div>
                     )}
 
                     {game.lockedPrice && (
                       <div className="flex justify-between items-center px-2 sm:px-3 py-2">
-                        <span className="text-gray-500 text-xs">Locked Price:</span>
-                        <span className="text-gray-600 text-xs sm:text-sm">{game.lockedPrice}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs">Locked Price:</span>
+                        <span className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm">{game.lockedPrice}</span>
                       </div>
                     )}
 
                     {game.prizePool && (
                       <div className="flex justify-between items-center px-2 sm:px-3 py-2">
-                        <span className="text-gray-500 text-xs">Prize Pool:</span>
-                        <span className="text-gray-600 text-xs sm:text-sm">{game.prizePool}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs">Prize Pool:</span>
+                        <span className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm">{game.prizePool}</span>
                       </div>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-2 mb-3">
                     {(game.lastPrice || currentPrice) && (
-                      <div className="bg-gray-50 rounded-lg px-2 sm:px-3 py-2 border border-gray-200">
-                        <div className="text-gray-500 text-xs mb-0.5">LIVE LAST PRICE</div>
-                        <div className="text-red-600 text-xs sm:text-sm">{currentPrice || game.lastPrice}</div>
+                      <div className="bg-gray-50 dark:bg-zinc-900 rounded-lg px-2 sm:px-3 py-2 border border-gray-200 dark:border-zinc-800">
+                        <div className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">LIVE LAST PRICE</div>
+                        <div className="text-red-600 dark:text-red-500 text-xs sm:text-sm">{currentPrice || game.lastPrice}</div>
                       </div>
                     )}
 
                     {game.lockedPrice && (
                       <div className="flex justify-between items-center px-2 sm:px-3 py-2">
-                        <span className="text-gray-500 text-xs">Locked Price:</span>
-                        <span className="text-gray-900 text-xs sm:text-sm">{game.lockedPrice}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs">Locked Price:</span>
+                        <span className="text-gray-900 dark:text-white text-xs sm:text-sm">{game.lockedPrice}</span>
                       </div>
                     )}
 
                     {game.prizePool && (
                       <div className="flex justify-between items-center px-2 sm:px-3 py-2">
-                        <span className="text-gray-500 text-xs">Prize Pool:</span>
-                        <span className="text-gray-900 text-xs sm:text-sm">{game.prizePool}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs">Prize Pool:</span>
+                        <span className="text-gray-900 dark:text-white text-xs sm:text-sm">{game.prizePool}</span>
                       </div>
                     )}
                   </div>
@@ -280,9 +280,9 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
 
                 {/* DOWN Section */}
                 <div className="text-center mt-3">
-                  <div className="text-gray-500 text-xs mb-1">1.00x Payout</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">1.00x Payout</div>
                   <div className={`text-lg font-bold ${isExpired ?
-                    (game.result === 'DOWN' ? "text-red-500" : "text-gray-400") :
+                    (game.result === 'DOWN' ? "text-red-500" : "text-gray-400 dark:text-gray-600") :
                     "text-red-500"
                     }`}>DOWN</div>
                 </div>
@@ -292,19 +292,19 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
         </div>
 
         {/* BACK FACE (Input Form) */}
-        <div className="absolute top-0 left-0 w-full h-full backface-hidden rotate-y-180 bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border border-gray-200 flex flex-col">
+        <div className="absolute top-0 left-0 w-full h-full backface-hidden rotate-y-180 bg-white dark:bg-zinc-950 rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border border-gray-200 dark:border-zinc-800 flex flex-col">
           {/* Header */}
-          <div className={`px-3 sm:px-4 py-3 flex items-center justify-between ${prediction === 'UP' ? 'bg-green-50 border-b border-green-100' : 'bg-red-50 border-b border-red-100'
+          <div className={`px-3 sm:px-4 py-3 flex items-center justify-between ${prediction === 'UP' ? 'bg-green-50 dark:bg-green-900/20 border-b border-green-100 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/30'
             }`}>
             <button
               onClick={handleBackClick}
-              className="p-1 rounded-full hover:bg-white/50 transition-colors"
+              className="p-1 rounded-full hover:bg-white/50 dark:hover:bg-black/20 transition-colors"
             >
-              <ArrowLeft className={`w-5 h-5 ${prediction === 'UP' ? 'text-green-700' : 'text-red-700'}`} />
+              <ArrowLeft className={`w-5 h-5 ${prediction === 'UP' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`} />
             </button>
             <button
               onClick={() => setPrediction(prediction === 'UP' ? 'DOWN' : 'UP')}
-              className={`font-bold transition-all hover:scale-105 active:scale-95 ${prediction === 'UP' ? 'text-green-700' : 'text-red-700'}`}
+              className={`font-bold transition-all hover:scale-105 active:scale-95 ${prediction === 'UP' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}
             >
               {prediction === 'UP' ? 'Enter UP' : 'Enter DOWN'}
             </button>
@@ -315,7 +315,7 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
           <div className="p-4 flex-1 flex flex-col justify-center">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Amount (LNRA)
                 </label>
                 <div className="relative">
@@ -330,18 +330,18 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
                     required
                     autoFocus
                     disabled={isSubmitting}
-                    className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full px-4 py-3 text-lg border-2 border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm font-medium">
                     LNRA
                   </div>
                 </div>
               </div>
 
               {status && (
-                <div className={`p-3 rounded-lg flex items-start gap-2 text-sm ${status.type === 'success' ? 'bg-green-50 text-green-700' :
-                  status.type === 'error' ? 'bg-red-50 text-red-700' :
-                    'bg-blue-50 text-blue-700'
+                <div className={`p-3 rounded-lg flex items-start gap-2 text-sm ${status.type === 'success' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' :
+                  status.type === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400' :
+                    'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
                   }`}>
                   {status.type === 'success' ? <Check className="w-4 h-4 mt-0.5" /> :
                     status.type === 'error' ? <AlertCircle className="w-4 h-4 mt-0.5" /> :

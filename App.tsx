@@ -2,6 +2,7 @@ import { Header } from "./components/Header";
 import { GameCard } from "./components/GameCard";
 import { ChartTabs } from "./components/ChartTabs";
 import { LineraProvider, useLinera } from "./components/LineraProvider";
+import { ThemeProvider } from "./components/ThemeProvider";
 import { LotterySection } from "./components/LotterySection";
 import { MobileInstallPrompt } from "./components/MobileInstallPrompt";
 import { MobileOrientationHandler } from "./components/MobileOrientationHandler";
@@ -150,21 +151,13 @@ function AppContent() {
       closedAt: round.closedAt,
       createdAt: round.createdAt,
       entryStarts: status === 'Next' ?
-        formatLocalTime(Date.now() + 5 * 60 * 1000, {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }) : null, // 5 хвилин для Next
-      upBets: round.upBets,
-      downBets: round.downBets,
-      upBetsPool: round.upBetsPool,
-      downBetsPool: round.downBetsPool
+        formatLocalTime(Date.now() + 5 * 60 * 1000) : null
     };
   };
 
-  // Розділяємо rounds за статусами
   const previousGames = activeRounds?.filter(round => round.status === 'RESOLVED')
-    .slice(-3) // Беремо максимум 3 останні expired блоки
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .slice(0, 3) // Беремо максимум 3 останні expired блоки
     .map(convertRoundToGame) || [];
   const liveGames = activeRounds?.filter(round => round.status === 'CLOSED').map(convertRoundToGame) || [];
   const nextGames = activeRounds?.filter(round => round.status === 'ACTIVE').map(convertRoundToGame) || [];
@@ -187,11 +180,7 @@ function AppContent() {
     resolvedAt: null,
     closedAt: null,
     createdAt: new Date().toISOString(),
-    entryStarts: null,
-    upBets: 0,
-    downBets: 0,
-    upBetsPool: '0',
-    downBetsPool: '0'
+    entryStarts: null
   };
 
   const laterGame2 = {
@@ -208,11 +197,7 @@ function AppContent() {
     resolvedAt: null,
     closedAt: null,
     createdAt: new Date().toISOString(),
-    entryStarts: null,
-    upBets: 0,
-    downBets: 0,
-    upBetsPool: '0',
-    downBetsPool: '0'
+    entryStarts: null
   };
 
   // Об'єднуємо всі ігри в один масив: Previous -> Live -> Next -> Later1 -> Later2
@@ -262,7 +247,7 @@ function AppContent() {
         onComplete={handleSplashComplete}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-zinc-950 dark:to-black transition-colors duration-300">
         <Header gameMode={gameMode} setGameMode={setGameMode} />
 
         {gameMode === 'prediction' ? (
@@ -276,8 +261,8 @@ function AppContent() {
                     <button
                       onClick={() => setActiveTab?.('btc')}
                       className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'btc'
-                        ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                        ? "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500 shadow-lg shadow-red-500/20"
+                        : "border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                         }`}
                     >
                       <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -289,8 +274,8 @@ function AppContent() {
                     <button
                       onClick={() => setActiveTab?.('eth')}
                       className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-3 rounded-xl border-2 transition-all duration-200 flex-shrink-0 touch-target ${activeTab === 'eth'
-                        ? "border-red-500 bg-red-50 text-red-600 shadow-lg shadow-red-500/20"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                        ? "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500 shadow-lg shadow-red-500/20"
+                        : "border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800"
                         }`}
                     >
                       <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -302,10 +287,10 @@ function AppContent() {
                   </div>
 
                   {/* Timer */}
-                  <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-3 bg-white rounded-full border border-gray-200 shadow-sm">
-                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-                    <span className="text-gray-800 text-base sm:text-base font-medium">{timeLeft}</span>
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">5m</span>
+                  <div className="flex items-center justify-center sm:justify-start gap-2 px-4 py-3 bg-white dark:bg-zinc-900 rounded-full border border-gray-200 dark:border-zinc-800 shadow-sm transition-colors duration-300">
+                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600 dark:text-gray-400" />
+                    <span className="text-gray-800 dark:text-white text-base sm:text-base font-medium">{timeLeft}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-1 rounded-full">5m</span>
                   </div>
                 </div>
               </div>
@@ -316,7 +301,7 @@ function AppContent() {
               <div className="mb-6 sm:mb-8">
                 <div
                   id="cards-container"
-                  className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 snap-x snap-mandatory -mx-3 px-3 sm:mx-0 sm:px-0 cards-container"
+                  className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-zinc-700 scrollbar-track-gray-100 dark:scrollbar-track-zinc-900 snap-x snap-mandatory -mx-3 px-3 sm:mx-0 sm:px-0 cards-container"
                   style={{
                     scrollBehavior: 'smooth',
                     msOverflowStyle: 'none',
@@ -340,7 +325,7 @@ function AppContent() {
         ) : (
           <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
             <div className="mb-6 sm:mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 px-1">Lottery Rounds</h2>
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 px-1">Lottery Rounds</h2>
               <LotterySection />
             </div>
           </main>
@@ -359,7 +344,9 @@ function AppContent() {
 export default function App() {
   return (
     <LineraProvider>
-      <AppContent />
+      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+        <AppContent />
+      </ThemeProvider>
     </LineraProvider>
   );
 }
