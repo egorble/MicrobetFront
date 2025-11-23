@@ -282,7 +282,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Lottery Fetching Logic
   const refreshLottery = async () => {
     const now = Date.now();
-    if (now - lastLotteryFetchRef.current < 1000) {
+    if (now - lastLotteryFetchRef.current < 500) {
       return; // Throttled: max 1 request per second
     }
     lastLotteryFetchRef.current = now;
@@ -292,13 +292,13 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       .from('lottery_rounds')
       .select('*')
       .order('id', { ascending: false })
-      .limit(50);
+      .limit(30);
 
     const { data: latestWinners } = await supabaseLottery
       .from('lottery_winners')
       .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(50);
 
     const winnersByRound = new Map<number, Winner[]>();
     const seenTickets = new Set<string>();
@@ -393,7 +393,8 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       } as LotteryRound
     });
 
-    if (state.lotteryApplication) {
+    const hasActiveLike = combined.some(r => r.status === 'ACTIVE' || r.status === 'CLOSED' || r.status === 'DRAWING')
+    if (state.lotteryApplication && (!dbRounds || dbRounds.length === 0 || !hasActiveLike)) {
       try {
         const q = {
           query: `query { allRounds { id status ticketPrice totalTicketsSold prizePool createdAt closedAt } }`
@@ -450,6 +451,138 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       lotteryWinners: mappedWinners
     }));
   };
+
+  const applyWinnerInsert = (payload: any) => {
+    try {
+      const w = payload?.new
+      if (!w) return
+      const roundId = Number(w.round_id)
+      const ticketId = String(w.ticket_number)
+      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now()
+      const winnerObj: Winner = {
+        roundId: String(roundId),
+        ticketId,
+        owner: String(w.source_chain_id || 'unknown'),
+        amount: String(w.prize_amount),
+        createdAt
+      }
+      const myChainId = (state.chainId || '').toLowerCase()
+      const ownerLower = winnerObj.owner.toLowerCase()
+      setState(prev => {
+        const existing = prev.lotteryWinners || []
+        const unique = new Set<string>()
+        const merged = [winnerObj, ...existing].filter(x => {
+          const key = `${x.roundId}-${x.ticketId}`
+          if (unique.has(key)) return false
+          unique.add(key)
+          return true
+        }).slice(0, 50)
+        const rounds = (prev.lotteryRounds || []).map(r => {
+          if (r.id === String(roundId)) {
+            const rw = [winnerObj, ...(r.winners || [])]
+            return { ...r, winners: rw }
+          }
+          return r
+        })
+        if (myChainId && ownerLower === myChainId) {
+          const uniqueKey = `${roundId}-${ticketId}`
+          const winKey = `win-${uniqueKey}`
+          if (!notifiedWinsRef.current.has(winKey)) {
+            notifiedWinsRef.current.add(winKey)
+            const newNotification: NotificationItem = {
+              id: crypto.randomUUID(),
+              message: `You won ${winnerObj.amount} LNRA in Round #${winnerObj.roundId}!`,
+              timestamp: Date.now(),
+              read: false,
+              type: 'win',
+              amount: winnerObj.amount,
+              roundId: winnerObj.roundId,
+              ticketId: winnerObj.ticketId
+            }
+            const notifications = [newNotification, ...(prev.notifications || [])].slice(0, 50)
+            return { ...prev, lotteryWinners: merged, lotteryRounds: rounds, notifications }
+          }
+        }
+        return { ...prev, lotteryWinners: merged, lotteryRounds: rounds }
+      })
+    } catch {}
+  }
+
+  const applyRoundUpsert = (payload: any) => {
+    try {
+      const row = payload?.new || payload?.old
+      if (!row) return
+      const createdMs = row.created_at ? (toMs(row.created_at) ?? Date.now()) : Date.now()
+      const endMs = createdMs + 5 * 60 * 1000
+      const statusUpper = String(row.status).toUpperCase() as LotteryStatus
+      const rr: LotteryRound = {
+        id: String(row.id),
+        status: statusUpper,
+        prizePool: String(row.prize_pool),
+        ticketPrice: String(row.ticket_price),
+        endTime: endMs,
+        ticketsSold: Number(row.totalTicketsSold || 0),
+        winners: []
+      }
+      setState(prev => {
+        const list = [...(prev.lotteryRounds || [])]
+        const idx = list.findIndex(x => x.id === rr.id)
+        if (idx >= 0) {
+          const ex = list[idx]
+          list[idx] = { ...ex, ...rr, winners: ex.winners }
+        } else {
+          list.unshift(rr)
+        }
+        list.sort((a, b) => Number(b.id) - Number(a.id))
+        return { ...prev, lotteryRounds: list }
+      })
+      if (statusUpper === 'CLOSED' || statusUpper === 'COMPLETE') {
+        const myChainId = (state.chainId || '').toLowerCase()
+        if (myChainId) {
+          supabaseLottery
+            .from('lottery_winners')
+            .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
+            .eq('round_id', Number(row.id))
+            .order('created_at', { ascending: false })
+            .limit(50)
+            .then(({ data }) => {
+              (data || []).forEach((w: any) => {
+                const ownerLower = String(w.source_chain_id || '').toLowerCase()
+                if (ownerLower === myChainId) {
+                  const uniqueKey = `${Number(row.id)}-${String(w.ticket_number)}`
+                  const winKey = `win-${uniqueKey}`
+                  if (!notifiedWinsRef.current.has(winKey)) {
+                    notifiedWinsRef.current.add(winKey)
+                    const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now()
+                    const newNotification: NotificationItem = {
+                      id: crypto.randomUUID(),
+                      message: `You won ${String(w.prize_amount)} LNRA in Round #${String(row.id)}!`,
+                      timestamp: Date.now(),
+                      read: false,
+                      type: 'win',
+                      amount: String(w.prize_amount),
+                      roundId: String(row.id),
+                      ticketId: String(w.ticket_number)
+                    }
+                    setState(prev => ({
+                      ...prev,
+                      notifications: [newNotification, ...(prev.notifications || [])].slice(0, 50),
+                      lotteryWinners: [{
+                        roundId: String(row.id),
+                        ticketId: String(w.ticket_number),
+                        owner: String(w.source_chain_id || 'unknown'),
+                        amount: String(w.prize_amount),
+                        createdAt
+                      }, ...(prev.lotteryWinners || [])].slice(0, 50)
+                    }))
+                  }
+                }
+              })
+            })
+        }
+      }
+    } catch {}
+  }
 
 
   // Функція для зміни активної вкладки
@@ -688,11 +821,13 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     const chRounds = supabaseLottery
       .channel('lottery_rounds_changes_global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_rounds' }, refreshLottery)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lottery_rounds' }, (payload: any) => { applyRoundUpsert(payload) })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lottery_rounds' }, (payload: any) => { applyRoundUpsert(payload) })
       .subscribe();
     const chWinners = supabaseLottery
       .channel('lottery_winners_changes_global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lottery_winners' }, refreshLottery)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lottery_winners' }, (payload: any) => { applyWinnerInsert(payload) })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lottery_winners' }, (payload: any) => { applyWinnerInsert(payload) })
       .subscribe();
 
     return () => {
