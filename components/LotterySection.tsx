@@ -56,6 +56,7 @@ export function LotterySection() {
             {/* Hero Section - Always rendered to prevent layout shift */}
             <LotteryHero
                 round={displayRound}
+                allWinners={lotteryWinners || []} // Pass global winners list
                 onBuyTicket={handleBuyTicket}
             />
 
