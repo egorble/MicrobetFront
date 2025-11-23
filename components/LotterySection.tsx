@@ -15,18 +15,19 @@ export function LotterySection() {
     const activeRound = rounds.find(r => r.status === "ACTIVE" || r.status === "CLOSED" || r.status === "DRAWING");
 
     // Logic to delay transition from a completed round to a new active round
-    const [delayedRound, setDelayedRound] = useState<LotteryRound | null>(null);
+    // We store the ID instead of the object to ensure we always render the latest data (e.g. if winners come in late)
+    const [delayedRoundId, setDelayedRoundId] = useState<string | null>(null);
     const prevActiveRoundRef = useRef<LotteryRound | undefined>(undefined);
 
     // Clear delayed round after 15 seconds
     useEffect(() => {
-        if (delayedRound) {
+        if (delayedRoundId) {
             const timer = setTimeout(() => {
-                setDelayedRound(null);
+                setDelayedRoundId(null);
             }, 15000);
             return () => clearTimeout(timer);
         }
-    }, [delayedRound]);
+    }, [delayedRoundId]);
 
     // Detect round transition
     useEffect(() => {
@@ -39,12 +40,13 @@ export function LotterySection() {
             // If the previous round is now COMPLETE, show it for a bit longer
             if (prevRoundLatest && prevRoundLatest.status === 'COMPLETE') {
                 console.log(`[LotterySection] Round ${prev.id} finished. Delaying transition to ${activeRound?.id} by 15s.`);
-                setDelayedRound(prevRoundLatest);
+                setDelayedRoundId(prev.id);
             }
         }
         prevActiveRoundRef.current = activeRound;
-    }, [activeRound, rounds]);
+    }, [activeRound?.id]); // Only trigger when activeRound ID changes
 
+    const delayedRound = delayedRoundId ? rounds.find(r => r.id === delayedRoundId) : null;
     const displayRound = delayedRound || activeRound;
 
     const historyRounds = rounds.filter(r => r.status === "COMPLETE");

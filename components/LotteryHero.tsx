@@ -16,8 +16,6 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
     const [lightningActive, setLightningActive] = useState(false);
 
-    const scrollRef = useRef<HTMLDivElement>(null);
-
     // Timer logic
     useEffect(() => {
         if (!round) return;
@@ -45,61 +43,11 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
         return () => clearInterval(interval);
     }, [round?.endTime, round?.id]);
 
-    const [displayedWinners, setDisplayedWinners] = useState<any[]>([]);
-    const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Reset displayed winners when round changes
-    useEffect(() => {
-        setDisplayedWinners([]);
-    }, [round?.id]);
-
-    // Handle reveal animation locally
-    useEffect(() => {
-        if (!round) return;
-        const isDrawing = round.status === 'DRAWING' || round.status === 'CLOSED';
-        const isComplete = round.status === 'COMPLETE';
-
-        if (!isDrawing && !isComplete) {
-            setDisplayedWinners([]);
-            return;
-        }
-
-        // If we already have all winners displayed, stop
-        if (displayedWinners.length >= round.winners.length) {
-            return;
-        }
-
-        // Start revealing if not already started
-        if (!revealTimerRef.current) {
-            revealTimerRef.current = setInterval(() => {
-                setDisplayedWinners(current => {
-                    if (current.length >= round.winners.length) {
-                        if (revealTimerRef.current) {
-                            clearInterval(revealTimerRef.current);
-                            revealTimerRef.current = null;
-                        }
-                        return current;
-                    }
-                    const nextIndex = current.length;
-                    return [...current, round.winners[nextIndex]];
-                });
-            }, 2000); // Reveal every 2 seconds
-        }
-
-        return () => {
-            if (revealTimerRef.current) {
-                clearInterval(revealTimerRef.current);
-                revealTimerRef.current = null;
-            }
-        };
-    }, [round?.status, round?.winners, displayedWinners.length]);
-
-    // Auto-scroll to bottom of winner list
-    useEffect(() => {
-        if (round && (round.status === "DRAWING" || round.status === "CLOSED") && scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [displayedWinners.length, round?.status]);
+    // Get the latest winner directly from the round data
+    // The winners array is sorted by created_at descending (newest first)
+    const latestWinner = round?.winners && round.winners.length > 0
+        ? round.winners[0]
+        : null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -322,32 +270,46 @@ export function LotteryHero({ round, onBuyTicket }: LotteryHeroProps) {
                                     </p>
                                 </div>
 
-                                {/* Live Winner Feed */}
-                                <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden flex flex-col h-[200px]">
-                                    <div className="bg-gray-100 px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between">
-                                        <span>Ticket #</span>
+                                {/* Live Winner Feed - Single Item Display */}
+                                <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden flex flex-col h-[180px] relative">
+                                    <div className="bg-gray-100 px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider flex justify-between z-10">
+                                        <span>Latest Winner</span>
                                         <span>Prize</span>
                                     </div>
-                                    <div
-                                        ref={scrollRef}
-                                        className="flex-1 overflow-y-auto p-2 space-y-2 scroll-smooth"
-                                    >
-                                        {displayedWinners.map((winner, idx) => (
-                                            <div key={`${winner.ticketId}-${idx}`} className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm border border-gray-100 animate-in slide-in-from-bottom-2 fade-in duration-500">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
-                                                        <Ticket className="w-3 h-3" />
-                                                    </div>
-                                                    <span className="font-mono font-bold text-gray-900">#{winner.ticketId}</span>
+
+                                    <div className="flex-1 flex items-center justify-center p-4 relative">
+                                        {latestWinner ? (
+                                            <div
+                                                key={latestWinner.ticketId}
+                                                className="w-full bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4 animate-in zoom-in-95 slide-in-from-bottom-4 duration-500"
+                                            >
+                                                <div className="w-12 h-12 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shadow-sm">
+                                                    <Ticket className="w-6 h-6" />
                                                 </div>
-                                                <span className="font-bold text-green-600">+{winner.amount} LNRA</span>
+
+                                                <div className="flex-1 text-left">
+                                                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-0.5">Winning Ticket</div>
+                                                    <div className="font-mono font-black text-xl text-gray-900 tracking-tight">
+                                                        #{latestWinner.ticketId}
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-right">
+                                                    <div className="flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-lg font-bold text-sm">
+                                                        <Sparkles className="w-3 h-3" />
+                                                        <span>+{latestWinner.amount}</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        ))}
-                                        {displayedWinners.length === 0 && (
-                                            <div className="h-full flex items-center justify-center text-gray-400 text-sm italic">
-                                                Waiting for results...
+                                        ) : (
+                                            <div className="text-center text-gray-400 space-y-2 animate-pulse">
+                                                <div className="w-12 h-12 bg-gray-200 rounded-full mx-auto"></div>
+                                                <div className="text-sm font-medium">Waiting for results...</div>
                                             </div>
                                         )}
+
+                                        {/* Background decoration */}
+                                        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none"></div>
                                     </div>
                                 </div>
                             </div>
