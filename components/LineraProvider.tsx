@@ -119,6 +119,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
+  const roundsBtcChannelRef = useRef<any>(null);
+  const roundsEthChannelRef = useRef<any>(null);
+  const roundsReconnectRef = useRef<Record<string, number>>({ btc: 0, eth: 0 });
+  const roundsPollRef = useRef<number | null>(null);
  
 
  
@@ -298,10 +302,10 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       const { data, error } = await supabase
         .from('rounds')
-        .select('*')
+        .select('id,status,resolution_price,resolved_at,closed_at,created_at,closing_price,up_bets,down_bets,result,prize_pool,up_bets_pool,down_bets_pool')
         .eq('chain', chain)
         .order('id', { ascending: false })
-        .limit(500);
+        .limit(200);
       if (error) throw error;
       const roundsDesc = (data || []).map((row: any) => ({
         id: row.id,
@@ -813,18 +817,52 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (state.loading || state.status !== 'Ready') {
       return;
     }
-    const btcChannel = supabase.channel('rounds_btc')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: 'chain=eq.btc' }, () => { scheduleRefreshRounds(); })
-      .subscribe();
-    const ethChannel = supabase.channel('rounds_eth')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: 'chain=eq.eth' }, () => { scheduleRefreshRounds(); })
-      .subscribe();
+    const subscribeRounds = (chain: 'btc' | 'eth') => {
+      const filter = `chain=eq.${chain}`;
+      const name = `rounds_${chain}`;
+      const ch = supabase
+        .channel(name)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter }, () => { scheduleRefreshRounds(); })
+        .subscribe((status: any) => {
+          if (status === 'SUBSCRIBED') {
+            roundsReconnectRef.current[chain] = 0;
+          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+            const attempt = (roundsReconnectRef.current[chain] || 0) + 1;
+            roundsReconnectRef.current[chain] = attempt;
+            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+            setTimeout(() => {
+              try {
+                const prev = chain === 'btc' ? roundsBtcChannelRef.current : roundsEthChannelRef.current;
+                if (prev) supabase.removeChannel(prev);
+              } catch {}
+              const newCh = subscribeRounds(chain);
+              if (chain === 'btc') roundsBtcChannelRef.current = newCh; else roundsEthChannelRef.current = newCh;
+            }, delay);
+          }
+        });
+      return ch;
+    };
+    const bc = subscribeRounds('btc');
+    const ec = subscribeRounds('eth');
+    roundsBtcChannelRef.current = bc;
+    roundsEthChannelRef.current = ec;
+    if (roundsPollRef.current == null) {
+      roundsPollRef.current = window.setInterval(() => {
+        try { refreshRounds?.(); } catch {}
+      }, 15000);
+    }
     return () => {
-      supabase.removeChannel(btcChannel)
-      supabase.removeChannel(ethChannel)
+      try { if (roundsBtcChannelRef.current) supabase.removeChannel(roundsBtcChannelRef.current); } catch {}
+      try { if (roundsEthChannelRef.current) supabase.removeChannel(roundsEthChannelRef.current); } catch {}
+      roundsBtcChannelRef.current = null;
+      roundsEthChannelRef.current = null;
       if (refreshTimerRef.current !== null) {
         clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
+      }
+      if (roundsPollRef.current != null) {
+        clearInterval(roundsPollRef.current);
+        roundsPollRef.current = null;
       }
     }
   }, [state.status, state.loading])

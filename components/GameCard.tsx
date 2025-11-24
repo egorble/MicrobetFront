@@ -1,5 +1,5 @@
 import { LightningAnimation } from "./LightningAnimation";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { formatLocalTime } from "../utils/timeUtils";
 import { useLinera } from "./LineraProvider";
 import { ArrowLeft, Check, AlertCircle } from "lucide-react";
@@ -45,7 +45,28 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
     return formatLocalTime(dateString);
   };
 
+  const [hasBet, setHasBet] = useState(false);
+
+  // Check for existing bet on mount or game change
+  useEffect(() => {
+    const checkBetStatus = () => {
+      if (!accountOwner) {
+        setHasBet(false);
+        return;
+      }
+      const betKey = `microbet_prediction_${game.id}_${accountOwner}`;
+      const savedBet = localStorage.getItem(betKey);
+      if (savedBet) {
+        setHasBet(true);
+      } else {
+        setHasBet(false);
+      }
+    };
+    checkBetStatus();
+  }, [game.id, accountOwner]);
+
   const handleButtonClick = (direction: 'up' | 'down') => {
+    if (hasBet) return; // Prevent interaction if already bet
     console.log(`Button clicked: ${direction}, lightning active: ${lightningActive}`);
     setLightningActive(true);
 
@@ -73,6 +94,11 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (hasBet) {
+      setStatus({ type: 'error', message: 'You have already placed a bet for this round.' });
+      return;
+    }
 
     const application = gameType === 'BTC' ? btcApplication : ethApplication;
 
@@ -111,6 +137,12 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
       console.log('Mutation result:', result);
 
       setStatus({ type: 'success', message: 'Success!' });
+
+      // Save bet state to localStorage with wallet address
+      if (accountOwner) {
+        localStorage.setItem(`microbet_prediction_${game.id}_${accountOwner}`, 'true');
+        setHasBet(true);
+      }
 
       if (refreshBalance) {
         await refreshBalance();
@@ -215,20 +247,26 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
                         <span className="text-gray-900 dark:text-white font-bold text-sm">{game.prizePool}</span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleButtonClick('up')}
-                        className="flex-1 border-2 border-green-500 text-green-500 hover:bg-green-500 hover:text-white font-bold py-4 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-green-500/25 text-sm touch-target active:scale-95"
-                      >
-                        Enter UP
-                      </button>
-                      <button
-                        onClick={() => handleButtonClick('down')}
-                        className="flex-1 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white font-bold py-4 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/25 text-sm touch-target active:scale-95"
-                      >
-                        Enter DOWN
-                      </button>
-                    </div>
+                    {hasBet ? (
+                      <div className="w-full py-4 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 font-bold text-center text-sm border-2 border-gray-200 dark:border-zinc-700">
+                        Bet Placed
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleButtonClick('up')}
+                          className="flex-1 border-2 border-green-500 text-green-500 hover:bg-green-500 hover:text-white font-bold py-4 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-green-500/25 text-sm touch-target active:scale-95"
+                        >
+                          Enter UP
+                        </button>
+                        <button
+                          onClick={() => handleButtonClick('down')}
+                          className="flex-1 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white font-bold py-4 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/25 text-sm touch-target active:scale-95"
+                        >
+                          Enter DOWN
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : isExpired ? (
                   <div className="space-y-2 mb-3">

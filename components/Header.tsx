@@ -205,7 +205,7 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
               <button
                 onClick={() => setGameMode('lottery')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'lottery'
-                  ? 'bg-white dark:bg-zinc-800 shadow-sm text-purple-700 dark:text-purple-400'
+                  ? 'bg-white dark:bg-zinc-800 shadow-sm text-red-600 dark:text-red-500'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >

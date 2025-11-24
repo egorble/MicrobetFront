@@ -102,7 +102,7 @@ function AppContent() {
   // Оновлюємо ціни при завантаженні та кожну секунду
   useEffect(() => {
     fetchTokenPrices();
-    const interval = setInterval(fetchTokenPrices, 1000);
+    const interval = setInterval(fetchTokenPrices, 3000);
     return () => clearInterval(interval);
   }, []);
 
