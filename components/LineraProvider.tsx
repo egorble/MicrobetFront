@@ -119,9 +119,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
-  const roundsBtcChannelRef = useRef<any>(null);
-  const roundsEthChannelRef = useRef<any>(null);
-  const roundsReconnectRef = useRef<Record<string, number>>({ btc: 0, eth: 0 });
   const roundsPollRef = useRef<number | null>(null);
  
 
@@ -254,7 +251,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       `;
 
       const result = await application.query(JSON.stringify({ query }));
-      console.log('Balance query result:', result);
+      // console.log('Balance query result:', result);
 
       // Парсимо результат
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
@@ -268,18 +265,18 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Функція для оновлення балансу (винесена з useEffect)
   const refreshBalance = async () => {
-    console.log('refreshBalance called');
+    // console.log('refreshBalance called');
     if (state.application && state.accountOwner) {
-      console.log('Querying new balance for:', state.accountOwner);
+      // console.log('Querying new balance for:', state.accountOwner);
       const newBalance = await queryBalance(state.application, state.accountOwner);
-      console.log('New balance received:', newBalance);
-      console.log('Current balance:', state.balance);
+      // console.log('New balance received:', newBalance);
+      // console.log('Current balance:', state.balance);
       setState(prev => {
-        console.log('Updating state with new balance:', newBalance);
+        // console.log('Updating state with new balance:', newBalance);
         return { ...prev, balance: newBalance };
       });
     } else {
-      console.log('Cannot refresh balance - missing application or accountOwner');
+      // console.log('Cannot refresh balance - missing application or accountOwner');
     }
   };
 
@@ -701,17 +698,17 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           subscriptionStatus: '🔄 Setting up subscription...'
         }));
 
-        console.log('Setting up subscription...');
-        console.log('Client object:', state.client);
-        console.log('Client methods:', state.client ? Object.getOwnPropertyNames(Object.getPrototypeOf(state.client)) : 'No client');
+        // console.log('Setting up subscription...');
+        // console.log('Client object:', state.client);
+        // console.log('Client methods:', state.client ? Object.getOwnPropertyNames(Object.getPrototypeOf(state.client)) : 'No client');
 
         // ✅ CORRECT: Use client.onNotification() for reactivity
         if (state.client && state.accountOwner) {
-          console.log('Setting up notification callback through client...');
+          // console.log('Setting up notification callback through client...');
 
           // Set up notification callback using client.onNotification()
           const unsubscribe = state.client.onNotification((notification: any) => {
-            console.log('Received notification:', notification);
+            // console.log('Received notification:', notification);
 
             // Check if this is a new block notification (indicates state change)
             if (notification.reason?.NewBlock) {
@@ -720,18 +717,18 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               const lastHeight = Number(localStorage.getItem(storageKey) || '0');
 
               if (newBlockHeight < lastHeight) {
-                console.log(`Ignoring old block notification: ${newBlockHeight} < ${lastHeight}`);
+                // console.log(`Ignoring old block notification: ${newBlockHeight} < ${lastHeight}`);
                 return;
               }
 
               // Update stored height
               localStorage.setItem(storageKey, String(newBlockHeight));
-              console.log(`Processing new block: ${newBlockHeight}, refreshing balance...`);
+              // console.log(`Processing new block: ${newBlockHeight}, refreshing balance...`);
 
               // Refresh balance when new block is detected
               if (state.application && state.accountOwner) {
                 queryBalance(state.application, state.accountOwner).then(newBalance => {
-                  console.log('Balance updated after new block:', newBalance);
+                  // console.log('Balance updated after new block:', newBalance);
 
                   // ✅ ВАЖЛИВО: Оновлюємо стан з новим балансом
                   setState(prev => ({
@@ -773,12 +770,12 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             subscriptionStatus: '✅ Notification callback active'
           }));
 
-          console.log('Notification callback set up successfully');
+          // console.log('Notification callback set up successfully');
 
           // Initial load of rounds data
           refreshRounds();
         } else {
-          console.log('Client or accountOwner not available for notifications');
+          // console.log('Client or accountOwner not available for notifications');
           setState(prev => ({
             ...prev,
             subscriptionStatus: '⚠️ Notifications not available - missing client or accountOwner'
@@ -805,7 +802,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             ...prev,
             subscriptionStatus: '🔴 Notifications disabled'
           }));
-          console.log('Main notification callback removed');
+          // console.log('Main notification callback removed');
         } catch (err) {
           console.warn('Error removing main notification callback:', err);
         }
@@ -813,49 +810,66 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [state.client, state.accountOwner, state.loading]); // Dependencies: client, accountOwner and loading
 
+  // Separate effect for Rounds Subscription (independent of wallet status)
   useEffect(() => {
-    if (state.loading || state.status !== 'Ready') {
-      return;
-    }
-    const subscribeRounds = (chain: 'btc' | 'eth') => {
-      const filter = `chain=eq.${chain}`;
-      const name = `rounds_${chain}`;
-      const ch = supabase
-        .channel(name)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter }, () => { scheduleRefreshRounds(); })
+    // console.log('Setting up Supabase Realtime subscription for Rounds...');
+    
+    let activeChannel: any = null;
+    let retryTimeout: number | null = null;
+    let isUnmounted = false;
+
+    const setupSubscription = () => {
+      if (isUnmounted) return;
+
+      const channelName = 'public:rounds_global';
+      // console.log(`Subscribing to channel: ${channelName}`);
+      
+      const ch = supabase.channel(channelName)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds' }, () => { 
+          // console.log('Realtime update received for rounds:', payload);
+          scheduleRefreshRounds(); 
+        })
         .subscribe((status: any) => {
+          // console.log(`Subscription status for ${channelName}:`, status);
+          
           if (status === 'SUBSCRIBED') {
-            roundsReconnectRef.current[chain] = 0;
+            // Connection successful
           } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-            const attempt = (roundsReconnectRef.current[chain] || 0) + 1;
-            roundsReconnectRef.current[chain] = attempt;
-            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
-            setTimeout(() => {
-              try {
-                const prev = chain === 'btc' ? roundsBtcChannelRef.current : roundsEthChannelRef.current;
-                if (prev) supabase.removeChannel(prev);
-              } catch {}
-              const newCh = subscribeRounds(chain);
-              if (chain === 'btc') roundsBtcChannelRef.current = newCh; else roundsEthChannelRef.current = newCh;
-            }, delay);
+            if (!isUnmounted && activeChannel === ch) {
+              console.warn(`Subscription issue (${status}), reconnecting in 5s...`);
+              if (retryTimeout) clearTimeout(retryTimeout);
+              retryTimeout = window.setTimeout(() => {
+                if (isUnmounted) return;
+                try { supabase.removeChannel(ch); } catch {}
+                setupSubscription();
+              }, 5000);
+            }
           }
         });
-      return ch;
+      
+      activeChannel = ch;
     };
-    const bc = subscribeRounds('btc');
-    const ec = subscribeRounds('eth');
-    roundsBtcChannelRef.current = bc;
-    roundsEthChannelRef.current = ec;
+
+    setupSubscription();
+    
+    // Polling fallback
     if (roundsPollRef.current == null) {
       roundsPollRef.current = window.setInterval(() => {
         try { refreshRounds?.(); } catch {}
       }, 15000);
     }
+    
     return () => {
-      try { if (roundsBtcChannelRef.current) supabase.removeChannel(roundsBtcChannelRef.current); } catch {}
-      try { if (roundsEthChannelRef.current) supabase.removeChannel(roundsEthChannelRef.current); } catch {}
-      roundsBtcChannelRef.current = null;
-      roundsEthChannelRef.current = null;
+      // console.log('Cleaning up Rounds subscriptions...');
+      isUnmounted = true;
+      if (retryTimeout) clearTimeout(retryTimeout);
+      
+      if (activeChannel) {
+        const ch = activeChannel;
+        activeChannel = null;
+        try { supabase.removeChannel(ch); } catch {}
+      }
+      
       if (refreshTimerRef.current !== null) {
         clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
@@ -865,6 +879,13 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         roundsPollRef.current = null;
       }
     }
+  }, []); // Run once on mount, independent of wallet status
+
+  useEffect(() => {
+    if (state.loading || state.status !== 'Ready') {
+      return;
+    }
+    // Only keeping wallet-specific logic here if any (currently none related to rounds)
   }, [state.status, state.loading])
 
   // Lottery Subscriptions

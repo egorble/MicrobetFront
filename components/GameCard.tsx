@@ -67,7 +67,7 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
 
   const handleButtonClick = (direction: 'up' | 'down') => {
     if (hasBet) return; // Prevent interaction if already bet
-    console.log(`Button clicked: ${direction}, lightning active: ${lightningActive}`);
+    // console.log(`Button clicked: ${direction}, lightning active: ${lightningActive}`);
     setLightningActive(true);
 
     // Set prediction and flip card
@@ -78,7 +78,7 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
     setAmount('');
     setStatus(null);
 
-    console.log(`Clicked ${direction} for game ${game.id}`);
+    // console.log(`Clicked ${direction} for game ${game.id}`);
   };
 
   const handleBackClick = () => {
@@ -88,7 +88,7 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
   };
 
   const handleLightningComplete = useCallback(() => {
-    console.log('Lightning animation completed, setting active to false');
+    // console.log('Lightning animation completed, setting active to false');
     setLightningActive(false);
   }, []);
 
@@ -133,8 +133,8 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
         }
       `;
 
-      const result = await application.query(JSON.stringify({ query: mutation }));
-      console.log('Mutation result:', result);
+      await application.query(JSON.stringify({ query: mutation }));
+      // console.log('Mutation result:', result);
 
       setStatus({ type: 'success', message: 'Success!' });
 

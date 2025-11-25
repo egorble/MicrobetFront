@@ -1,7 +1,7 @@
 const axios = require('axios')
 const WebSocket = require('ws')
 
-const LOTTERY_HTTP = 'http://localhost:8081/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/a41bebfc427a7b9df271c4bd2c9b6d8977fdac7aa8da313abca396b7e51b9769'
+const LOTTERY_HTTP = 'http://localhost:8081/chains/8ef368ecf34600e89fff97baeea590362474500019890c5aec104c970cc9c939/applications/a41bebfc427a7b9df271c4bd2c9b6d8977fdac7aa8da313abca396b7e51b9769'
 
 function now() { return new Date().toISOString() }
 function log() { const args = Array.from(arguments); console.log(`[${now()}] [lottery-orchestrator]`, ...args) }

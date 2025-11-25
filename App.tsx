@@ -158,6 +158,7 @@ function AppContent() {
   const previousGames = activeRounds?.filter(round => round.status === 'RESOLVED')
     .sort((a, b) => Number(b.id) - Number(a.id))
     .slice(0, 3) // Беремо максимум 3 останні expired блоки
+    .reverse()
     .map(convertRoundToGame) || [];
   const liveGames = activeRounds?.filter(round => round.status === 'CLOSED').map(convertRoundToGame) || [];
   const nextGames = activeRounds?.filter(round => round.status === 'ACTIVE').map(convertRoundToGame) || [];
