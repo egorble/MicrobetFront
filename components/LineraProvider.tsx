@@ -594,8 +594,8 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         await linera.default();
       }
       const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net';
-      const btcApplicationId = import.meta.env.VITE_BTC_APPLICATION_ID || 'btc_app_id_here';
-      const ethApplicationId = import.meta.env.VITE_ETH_APPLICATION_ID || 'eth_app_id_here';
+      const btcApplicationId = import.meta.env.VITE_LINERA_APPLICATION_ID || 'btc_app_id_here';
+      const ethApplicationId = import.meta.env.VITE_LINERA_APPLICATION_ID || 'eth_app_id_here';
       const lotteryApplicationId = import.meta.env.VITE_LOTTERY_APPLICATION_ID || '';
       let signer: any = new MetaMask();
       const faucet = new linera.Faucet(faucetUrl);

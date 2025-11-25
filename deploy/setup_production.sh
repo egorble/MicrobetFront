@@ -45,8 +45,12 @@ if [ ! -f "$WORK_DIR/.env.local" ]; then
   cat > "$WORK_DIR/.env.local" <<EOF
 VITE_SUPABASE_URL=https://krvnqndokmyjbjonqauz.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtydm5xbmRva215amJqb25xYXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMzA4NzcsImV4cCI6MjA3ODgwNjg3N30.wx6RRWcS65WOhbMVt2yoFLD52KmWfeoN4KpwZy0z954
+VITE_LINERA_APPLICATION_ID=49b8ff8611067f16a857b66ffe6f297f712c1b62ff88ad3793eb73d71aeea0bf
 VITE_BTC_CHAIN_ID=68113d35d4d4bccf55484cfdfe483955127740badafc80bdfc0621200f69004a
 VITE_ETH_CHAIN_ID=4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7
+VITE_LOTTERY_APPLICATION_ID=a41bebfc427a7b9df271c4bd2c9b6d8977fdac7aa8da313abca396b7e51b9769
+VITE_LOTTERY_CHAIN_ID=8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66
+VITE_LOTTERY_TARGET_OWNER=0x3e04a519849879bbe6ee71756d2e14beb97ba09e1f5f6c9a6b385a68c9105402
 EOF
 fi
 
@@ -227,6 +231,25 @@ Group=$RUN_USER
 WantedBy=multi-user.target
 EOF"
 
+# Lottery Orchestrator
+sudo bash -c "cat > /etc/systemd/system/microbet-lottery-orchestrator.service <<EOF
+[Unit]
+Description=Microbet Lottery Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$WORK_DIR/orchestrator
+ExecStart=/usr/bin/node lottery-orchestrator.js
+Restart=always
+RestartSec=5
+User=$RUN_USER
+Group=$RUN_USER
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
 # Supabase Sync
 sudo bash -c "cat > /etc/systemd/system/microbet-sync.service <<EOF
 [Unit]
@@ -247,8 +270,28 @@ Group=$RUN_USER
 WantedBy=multi-user.target
 EOF"
 
+# Lottery Sync
+sudo bash -c "cat > /etc/systemd/system/microbet-lottery-sync.service <<EOF
+[Unit]
+Description=Microbet Lottery Sync Daemon
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$WORK_DIR/orchestrator
+ExecStart=/usr/bin/node lottery-supabase-sync.js
+EnvironmentFile=/etc/microbet-linera/supabase.env
+Restart=always
+RestartSec=5
+User=$RUN_USER
+Group=$RUN_USER
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now microbet-orchestrator.service microbet-sync.service
+sudo systemctl enable --now microbet-orchestrator.service microbet-sync.service microbet-lottery-orchestrator.service microbet-lottery-sync.service
 
 echo "====================================="
 echo " Deployment completed successfully!  "
