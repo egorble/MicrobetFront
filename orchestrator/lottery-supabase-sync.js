@@ -39,7 +39,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL_LOTTERY || process.env.SUPABASE_UR
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY_LOTTERY || process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
 
-const LOTTERY_HTTP = config.endpoints?.LOTTERY || 'http://localhost:8081/chains/8ef368ecf34600e89fff97baeea590362474500019890c5aec104c970cc9c939/applications/c2dad20dd15958901615a149e3de7852ce369d8663230c3d8c938dbd509018ee'
+const LOTTERY_HTTP = config.endpoints?.LOTTERY || 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
 
 function extractChainId(endpointUrl) {
   const m = endpointUrl.match(/\/chains\/([^/]+)/)

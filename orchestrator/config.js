@@ -7,7 +7,7 @@ module.exports = {
   endpoints: {
     BTC: 'http://localhost:8082/chains/68113d35d4d4bccf55484cfdfe483955127740badafc80bdfc0621200f69004a/applications/49b8ff8611067f16a857b66ffe6f297f712c1b62ff88ad3793eb73d71aeea0bf',
     ETH: 'http://localhost:8083/chains/4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7/applications/49b8ff8611067f16a857b66ffe6f297f712c1b62ff88ad3793eb73d71aeea0bf',
-    LOTTERY: 'http://localhost:8081/chains/8ef368ecf34600e89fff97baeea590362474500019890c5aec104c970cc9c939/applications/a41bebfc427a7b9df271c4bd2c9b6d8977fdac7aa8da313abca396b7e51b9769'
+    LOTTERY: 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
   },
 
   // Налаштування часу

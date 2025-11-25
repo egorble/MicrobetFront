@@ -133,8 +133,13 @@ export function GameCard({ game, currentPrice, gameType }: GameCardProps) {
         }
       `;
 
-      await application.query(JSON.stringify({ query: mutation }));
-      // console.log('Mutation result:', result);
+      const result = await application.query(JSON.stringify({ query: mutation }));
+      
+      const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      
+      if (parsedResult.errors) {
+        throw new Error(parsedResult.errors[0].message);
+      }
 
       setStatus({ type: 'success', message: 'Success!' });
 
