@@ -20,6 +20,24 @@ function now() { return new Date().toISOString() }
 function log(...args) { console.log(`[${now()}] [bot-buy-tickets]`, ...args) }
 function error(...args) { console.error(`[${now()}] [bot-buy-tickets]`, ...args) }
 
+// Helper: Sleep
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Helper: Random Amount
+function getRandomAmount() {
+  // Generates a random number between 4 and 6 inclusive, formatted as a string with 2 decimal places?
+  // The user asked for "random from 4 to 6".
+  // "4." suggests it needs to be a string format Linera accepts.
+  // Let's do integer or simple float string.
+  // Range: [4, 6]
+  const min = 4;
+  const max = 6;
+  const val = Math.floor(Math.random() * (max - min + 1)) + min; 
+  return `${val}.`; // e.g., "4.", "5.", "6."
+}
+
 // GraphQL Helper
 async function executeQuery(endpoint, query) {
   try {
@@ -30,32 +48,38 @@ async function executeQuery(endpoint, query) {
     if (res.data?.errors) throw new Error(JSON.stringify(res.data.errors))
     return res.data?.data
   } catch (e) {
-    error('Query failed:', e.message)
-    return null
+    // Re-throw to allow retry logic to catch it
+    throw new Error(e.message || 'Unknown error')
   }
 }
 
 // Fetch Active Round
 async function getActiveRound() {
   const query = `query { allRounds { id status } }`
-  const data = await executeQuery(LOTTERY_ENDPOINT, query)
-  if (!data?.allRounds) return null
-  
-  // Find round with status ACTIVE
-  const activeRound = data.allRounds
-    .filter(r => String(r.status).toUpperCase() === 'ACTIVE')
-    .sort((a, b) => Number(b.id) - Number(a.id))[0]
+  try {
+    const data = await executeQuery(LOTTERY_ENDPOINT, query)
+    if (!data?.allRounds) return null
     
-  return activeRound
+    // Find round with status ACTIVE
+    const activeRound = data.allRounds
+      .filter(r => String(r.status).toUpperCase() === 'ACTIVE')
+      .sort((a, b) => Number(b.id) - Number(a.id))[0]
+      
+    return activeRound
+  } catch (e) {
+    error('Failed to fetch active round:', e.message)
+    return null
+  }
 }
 
-// Buy Tickets Mutation
+// Buy Tickets Mutation with Retry
 async function buyTickets(roundId) {
+  const amount = getRandomAmount()
   const mutation = `
     mutation {
       transfer(
         owner: "${BOT_OWNER}",
-        amount: "4.",
+        amount: "${amount}",
         targetAccount: {
           chainId: "${LOTTERY_CHAIN_ID}",
           owner: "${TARGET_OWNER}"
@@ -64,10 +88,26 @@ async function buyTickets(roundId) {
       )
     }
   `
-  log(`Sending buy ticket mutation for round ${roundId}...`)
-  const res = await executeQuery(BOT_ENDPOINT, mutation)
-  if (res) {
-    log(`Successfully bought tickets for round ${roundId}`)
+  
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      log(`Sending buy ticket mutation for round ${roundId} (amount: ${amount}, attempt: ${attempt}/${maxRetries})...`)
+      const res = await executeQuery(BOT_ENDPOINT, mutation)
+      if (res) {
+        log(`Successfully bought tickets for round ${roundId}`)
+        return; // Success, exit function
+      }
+    } catch (e) {
+      error(`Attempt ${attempt} failed: ${e.message}`)
+      if (attempt < maxRetries) {
+        const delay = 2000 * attempt; // Exponential backoff-ish: 2s, 4s
+        log(`Retrying in ${delay}ms...`)
+        await sleep(delay);
+      } else {
+        error(`All ${maxRetries} attempts failed for round ${roundId}`)
+      }
+    }
   }
 }
 
