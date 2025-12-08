@@ -5,8 +5,8 @@
 module.exports = {
   // Ендпоінти Linera applications
   endpoints: {
-    BTC: 'http://localhost:8082/chains/68113d35d4d4bccf55484cfdfe483955127740badafc80bdfc0621200f69004a/applications/49b8ff8611067f16a857b66ffe6f297f712c1b62ff88ad3793eb73d71aeea0bf',
-    ETH: 'http://localhost:8083/chains/4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7/applications/49b8ff8611067f16a857b66ffe6f297f712c1b62ff88ad3793eb73d71aeea0bf',
+    BTC: 'http://localhost:8082/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315',
+    ETH: 'http://localhost:8083/chains/4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315',
     LOTTERY: 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
   },
 

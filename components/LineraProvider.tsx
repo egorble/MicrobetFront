@@ -2,8 +2,19 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import * as linera from '@linera/client';
 import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
-import { supabase, supabaseLottery } from '../utils/supabaseClient';
+import { supabaseLottery } from '../utils/supabaseClient';
 import { parseTimestamp } from '../utils/timeUtils';
+import PocketBase from 'pocketbase'
+
+const PB_URL: string = ((import.meta.env as any).VITE_POCKETBASE_URL as string) || 'http://127.0.0.1:8090'
+const pb: PocketBase = (() => {
+  const g = globalThis as any
+  if (g.__pb_client) return g.__pb_client as PocketBase
+  const c = new PocketBase(PB_URL)
+  try { c.autoCancellation(false) } catch {}
+  g.__pb_client = c
+  return c
+})()
 
 // Types for rounds data
 interface Round {
@@ -119,7 +130,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
-  const roundsPollRef = useRef<number | null>(null);
  
 
  
@@ -294,59 +304,55 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return { upPayout, downPayout };
   };
 
-  // Функція для запиту rounds із Supabase
   const queryRounds = async (chain: 'btc' | 'eth'): Promise<Round[]> => {
     try {
-      const { data, error } = await supabase
-        .from('rounds')
-        .select('id,status,resolution_price,resolved_at,closed_at,created_at,closing_price,up_bets,down_bets,result,prize_pool,up_bets_pool,down_bets_pool')
-        .eq('chain', chain)
-        .order('id', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      const roundsDesc = (data || []).map((row: any) => ({
-        id: row.id,
-        status: row.status,
+      const res = await pb.collection('rounds').getList(1, 200, {
+        sort: '-round_id',
+        filter: `chain ~ \"${chain}\"`,
+        requestKey: `rounds-${chain}`
+      })
+      const list = res?.items || []
+      try { console.log('[PB] getList rounds length=', list.length, 'url=', PB_URL, 'chain=', chain) } catch {}
+      try { console.log('[PB] sample rounds=', JSON.stringify(list.slice(0, 3), null, 2)) } catch {}
+      const roundsDesc = list.map((row: any) => ({
+        id: Number(row.round_id ?? 0),
+        status: (Array.isArray(row.status) ? (row.status[0] ?? 'ACTIVE') : row.status),
         resolutionPrice: row.resolution_price != null ? String(row.resolution_price) : null,
-        resolvedAt: row.resolved_at,
-        closedAt: row.closed_at,
-        createdAt: row.created_at,
+        resolvedAt: row.resolved_at ?? null,
+        closedAt: row.closed_at ?? null,
+        createdAt: row.created_at ?? new Date().toISOString(),
         closingPrice: row.closing_price != null ? String(row.closing_price) : null,
-        upBets: row.up_bets,
-        downBets: row.down_bets,
-        result: row.result,
-        prizePool: String(row.prize_pool),
-        upBetsPool: String(row.up_bets_pool),
-        downBetsPool: String(row.down_bets_pool),
-      })) as Round[];
-      const rounds = roundsDesc.slice().sort((a, b) => a.id - b.id);
-
-      // Додаємо розраховані payout коефіцієнти
+        upBets: Number(row.up_bets ?? 0),
+        downBets: Number(row.down_bets ?? 0),
+        result: row.result ? row.result : null,
+        prizePool: String(row.prize_pool ?? '0'),
+        upBetsPool: String(row.up_bets_pool ?? '0'),
+        downBetsPool: String(row.down_bets_pool ?? '0'),
+      })) as Round[]
+      const rounds = roundsDesc.slice().sort((a, b) => a.id - b.id)
+      try { console.log('[PB] mapped rounds count=', rounds.length) } catch {}
       return rounds.map((round: Round) => {
-        const { upPayout, downPayout } = calculatePayouts(round);
-        return { ...round, upPayout, downPayout };
-      });
-    } catch (error) {
-      return [];
+        const { upPayout, downPayout } = calculatePayouts(round)
+        return { ...round, upPayout, downPayout }
+      })
+    } catch (e) {
+      try { console.warn('[PB] queryRounds failed:', e) } catch {}
+      return []
     }
-  };
+  }
 
   // Функція для оновлення rounds data
   const refreshRounds = async () => {
     try {
-      const [btcRounds, ethRounds] = await Promise.all([
-        queryRounds('btc'),
-        queryRounds('eth')
-      ]);
-
+      const btcRounds = await queryRounds('btc')
+      const ethRounds = await queryRounds('eth')
       setState(prev => ({
         ...prev,
         btcRounds,
         ethRounds
       }));
-    } catch (error) {
-      // Мовчки обробляємо помилку
-    }
+      try { console.log('[PB] state updated: btcRounds=', btcRounds.length, 'ethRounds=', ethRounds.length) } catch {}
+    } catch (error) {}
   };
 
  
@@ -585,14 +591,14 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     try {
       setState(prev => ({ ...prev, status: 'Connecting', loading: true }));
       try {
-        await linera.default();
+        await linera.initialize();
       } catch (wasmError) {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        await linera.default();
+        await linera.initialize();
       }
       const faucetUrl = import.meta.env.VITE_LINERA_FAUCET_URL || 'https://faucet.testnet-conway.linera.net';
-      const btcApplicationId = import.meta.env.VITE_LINERA_APPLICATION_ID || 'btc_app_id_here';
-      const ethApplicationId = import.meta.env.VITE_LINERA_APPLICATION_ID || 'eth_app_id_here';
+      const nativeApplicationId = import.meta.env.VITE_NATIVE_APPLICATION_ID || '';
+      const microbetApplicationId = import.meta.env.VITE_MICROBET_APPLICATION_ID || '';
       const lotteryApplicationId = import.meta.env.VITE_LOTTERY_APPLICATION_ID || '';
       let signer: any = new MetaMask();
       const faucet = new linera.Faucet(faucetUrl);
@@ -602,10 +608,11 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const chainId = await faucet.claimChain(wallet, owner);
       setState(prev => ({ ...prev, status: 'Creating Client' }));
       const clientInstance = await new linera.Client(wallet, signer, true);
-      const btcApplication = await clientInstance.frontend().application(btcApplicationId);
-      const ethApplication = await clientInstance.frontend().application(ethApplicationId);
-      const lotteryApplication = lotteryApplicationId ? await clientInstance.frontend().application(lotteryApplicationId) : undefined;
-      const initialBalance = await queryBalance(btcApplication, owner);
+      const nativeApp = await clientInstance.application(nativeApplicationId);
+      const btcApplication = await clientInstance.application(microbetApplicationId);
+      const ethApplication = await clientInstance.application(microbetApplicationId);
+      const lotteryApplication = lotteryApplicationId ? await clientInstance.application(lotteryApplicationId) : undefined;
+      const initialBalance = await queryBalance(nativeApp, owner);
       if (parseFloat(initialBalance) === 0) {
         try {
           const mutation = `
@@ -616,15 +623,15 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
               )
             }
           `;
-          await btcApplication.query(JSON.stringify({ query: mutation }));
+          await nativeApp.query(JSON.stringify({ query: mutation }));
           markBundlesClaimed();
-          const balanceAfterMint = await queryBalance(btcApplication, owner);
+          const balanceAfterMint = await queryBalance(nativeApp, owner);
           setState(prev => ({
             ...prev,
             client: clientInstance,
             wallet,
             chainId,
-            application: btcApplication,
+            application: nativeApp,
             btcApplication,
             ethApplication,
             lotteryApplication,
@@ -639,7 +646,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             client: clientInstance,
             wallet,
             chainId,
-            application: btcApplication,
+            application: nativeApp,
             btcApplication,
             ethApplication,
             lotteryApplication,
@@ -655,7 +662,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           client: clientInstance,
           wallet,
           chainId,
-          application: btcApplication,
+          application: nativeApp,
           btcApplication,
           ethApplication,
           lotteryApplication,
@@ -812,71 +819,25 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Separate effect for Rounds Subscription (independent of wallet status)
   useEffect(() => {
-    // console.log('Setting up Supabase Realtime subscription for Rounds...');
-    
-    let activeChannel: any = null;
-    let retryTimeout: number | null = null;
-    let isUnmounted = false;
+    let isUnmounted = false
+    let subscribed = false
 
-    const setupSubscription = () => {
-      if (isUnmounted) return;
-
-      const channelName = 'public:rounds_global';
-      // console.log(`Subscribing to channel: ${channelName}`);
-      
-      const ch = supabase.channel(channelName)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds' }, () => { 
-          // console.log('Realtime update received for rounds:', payload);
-          scheduleRefreshRounds(); 
-        })
-        .subscribe((status: any) => {
-          // console.log(`Subscription status for ${channelName}:`, status);
-          
-          if (status === 'SUBSCRIBED') {
-            // Connection successful
-          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-            if (!isUnmounted && activeChannel === ch) {
-              console.warn(`Subscription issue (${status}), reconnecting in 5s...`);
-              if (retryTimeout) clearTimeout(retryTimeout);
-              retryTimeout = window.setTimeout(() => {
-                if (isUnmounted) return;
-                try { supabase.removeChannel(ch); } catch {}
-                setupSubscription();
-              }, 5000);
-            }
-          }
-        });
-      
-      activeChannel = ch;
-    };
-
-    setupSubscription();
-    
-    // Polling fallback
-    if (roundsPollRef.current == null) {
-      roundsPollRef.current = window.setInterval(() => {
-        try { refreshRounds?.(); } catch {}
-      }, 15000);
+    const setupSubscription = async () => {
+      if (isUnmounted) return
+      try {
+        await pb.collection('rounds').subscribe('*', () => { try { console.log('[PB] realtime event for rounds') } catch {}; scheduleRefreshRounds() })
+        subscribed = true
+      } catch {}
     }
+
+    setupSubscription()
     
     return () => {
-      // console.log('Cleaning up Rounds subscriptions...');
-      isUnmounted = true;
-      if (retryTimeout) clearTimeout(retryTimeout);
-      
-      if (activeChannel) {
-        const ch = activeChannel;
-        activeChannel = null;
-        try { supabase.removeChannel(ch); } catch {}
-      }
-      
+      isUnmounted = true
+      try { if (subscribed) pb.collection('rounds').unsubscribe('*') } catch {}
       if (refreshTimerRef.current !== null) {
-        clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-      if (roundsPollRef.current != null) {
-        clearInterval(roundsPollRef.current);
-        roundsPollRef.current = null;
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
       }
     }
   }, []); // Run once on mount, independent of wallet status

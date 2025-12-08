@@ -1,7 +1,6 @@
 const axios = require('axios')
 const WebSocket = require('ws')
-const { createClient } = require('@supabase/supabase-js')
-const { Pool } = require('pg')
+const PocketBase = require('pocketbase').default
 const config = require('./config')
 const fs = require('fs')
 const path = require('path')
@@ -29,11 +28,12 @@ function loadLocalEnv() {
 
 loadLocalEnv()
 
-const SUPABASE_URL = process.env.SUPABASE_URL || config.supabase?.url || 'https://oznvztsgrgfcithgnosn.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
-const SUPABASE_DB_URL = process.env.SUPABASE_DB_URL
-const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
-const pgPool = SUPABASE_DB_URL ? new Pool({ connectionString: SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } }) : null
+const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090'
+const pb = (() => {
+  const c = new PocketBase(PB_URL)
+  try { c.autoCancellation(false) } catch {}
+  return c
+})()
 
 function extractChainId(endpointUrl) {
   const m = endpointUrl.match(/\/chains\/([^/]+)/)
@@ -93,16 +93,16 @@ function toIsoSafe(v) {
   }
 }
 
-function mapRound(chain, r) {
+function mapPbRound(chain, r) {
   return {
-    id: r.id,
-    chain,
-    status: r.status,
+    round_id: Number(r.id),
+    chain: String(chain),
+    status: String(r.status).toUpperCase(),
     resolution_price: r.resolutionPrice != null ? Number(r.resolutionPrice) : null,
     closing_price: r.closingPrice != null ? Number(r.closingPrice) : null,
-    up_bets: r.upBets,
-    down_bets: r.downBets,
-    result: r.result,
+    up_bets: Number(r.upBets),
+    down_bets: Number(r.downBets),
+    result: r.result != null ? String(r.result) : null,
     prize_pool: Number(r.prizePool),
     up_bets_pool: Number(r.upBetsPool),
     down_bets_pool: Number(r.downBetsPool),
@@ -112,41 +112,70 @@ function mapRound(chain, r) {
   }
 }
 
-async function upsertRounds(chain, rounds) {
-  const payload = rounds.map(r => mapRound(chain, r))
-  if (supabase) {
-    const { error } = await supabase.from('rounds').upsert(payload, { onConflict: 'chain,id' })
-    if (error) throw error
-    return
+async function findPbRecord(chain, roundId) {
+  try {
+    const filter = `round_id = ${Number(roundId)} && chain ~ "${String(chain)}"`
+    const rec = await pb.collection('rounds').getFirstListItem(filter, { requestKey: `find-${chain}-${roundId}` })
+    return rec || null
+  } catch {
+    return null
   }
-  if (pgPool) {
-    const client = await pgPool.connect()
+}
+
+async function upsertOneRound(chain, r) {
+  const data = mapPbRound(chain, r)
+  const existing = await findPbRecord(chain, r.id)
+  if (existing && existing.id) {
     try {
-      const text = `insert into public.rounds (id, chain, status, resolution_price, closing_price, up_bets, down_bets, result, prize_pool, up_bets_pool, down_bets_pool, created_at, resolved_at, closed_at)
-                    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-                    on conflict (chain, id) do update set
-                      status = excluded.status,
-                      resolution_price = excluded.resolution_price,
-                      closing_price = excluded.closing_price,
-                      up_bets = excluded.up_bets,
-                      down_bets = excluded.down_bets,
-                      result = excluded.result,
-                      prize_pool = excluded.prize_pool,
-                      up_bets_pool = excluded.up_bets_pool,
-                      down_bets_pool = excluded.down_bets_pool,
-                      created_at = excluded.created_at,
-                      resolved_at = excluded.resolved_at,
-                      closed_at = excluded.closed_at`
-      for (const row of payload) {
-        const values = [row.id, row.chain, row.status, row.resolution_price, row.closing_price, row.up_bets, row.down_bets, row.result, row.prize_pool, row.up_bets_pool, row.down_bets_pool, row.created_at, row.resolved_at, row.closed_at]
-        await client.query(text, values)
-      }
-    } finally {
-      client.release()
+      await pb.collection('rounds').update(existing.id, data)
+      return 'updated'
+    } catch (e) {
+      try { console.error('[pb-sync] update error chain=', chain, 'round=', r.id, e?.message || e) } catch {}
+      return 'error'
     }
-    return
   }
-  throw new Error('No Supabase key or DB URL configured')
+  try {
+    await pb.collection('rounds').create(data)
+    return 'created'
+  } catch (e) {
+    // If create fails (e.g., unique index conflict), try update path again
+    try {
+      const fallback = await findPbRecord(chain, r.id)
+      if (fallback && fallback.id) {
+        await pb.collection('rounds').update(fallback.id, data)
+        return 'updated'
+      }
+    } catch {}
+    try { console.error('[pb-sync] create error chain=', chain, 'round=', r.id, e?.message || e) } catch {}
+    return 'error'
+  }
+}
+
+async function cleanupOldRounds(chain, keepCount = 10) {
+  try {
+    const res = await pb.collection('rounds').getList(1, 200, { sort: '-round_id', filter: `chain ~ "${String(chain)}"`, requestKey: `list-${chain}` })
+    const items = res?.items || []
+    if (items.length > keepCount) {
+      const toDelete = items.slice(keepCount)
+      for (const rec of toDelete) {
+        try { await pb.collection('rounds').delete(rec.id) } catch (e) { try { console.warn('[pb-sync] delete error id=', rec.id, e?.message || e) } catch {} }
+      }
+    }
+  } catch (e) {
+    try { console.warn('[pb-sync] cleanup error chain=', chain, e?.message || e) } catch {}
+  }
+}
+
+async function upsertRounds(chain, rounds) {
+  const latest = rounds.slice().sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 10)
+  let created = 0, updated = 0
+  for (const r of latest) {
+    const res = await upsertOneRound(chain, r)
+    if (res === 'created') created += 1
+    else if (res === 'updated') updated += 1
+  }
+  await cleanupOldRounds(chain, 10)
+  try { console.log(`[pb-sync] upsert chain=${chain} created=${created} updated=${updated} kept=${latest.length}`) } catch {}
 }
 
 function makeWs(url, chainId, onEvent) {
@@ -208,8 +237,8 @@ async function handleEthEvent() {
 }
 
 async function main() {
-  console.log('Starting Supabase sync daemon')
-  console.log('Supabase URL configured')
+  console.log('Starting PocketBase sync daemon')
+  console.log('PocketBase URL', PB_URL)
   await initialSync()
   console.log('Connecting BTC WS')
   makeWs(BTC_WS, BTC_CHAIN_ID, handleBtcEvent)
