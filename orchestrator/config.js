@@ -25,14 +25,17 @@ function loadEnv() {
   }
 }
 
+const endpoints = {}
+Object.defineProperties(endpoints, {
+  BTC: { enumerable: true, get() { return process.env.BTC_HTTP } },
+  ETH: { enumerable: true, get() { return process.env.ETH_HTTP } },
+  LOTTERY: { enumerable: true, get() { return process.env.LOTTERY_HTTP } },
+})
+
 module.exports = {
   loadEnv,
   // Ендпоінти Linera applications
-  endpoints: {
-    BTC: process.env.BTC_HTTP,
-    ETH: process.env.ETH_HTTP,
-    LOTTERY: process.env.LOTTERY_HTTP
-  },
+  endpoints,
 
   // Налаштування часу
   timing: {
