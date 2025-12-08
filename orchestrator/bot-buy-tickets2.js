@@ -1,16 +1,31 @@
 const axios = require('axios')
 const WebSocket = require('ws')
+const config = require('./config')
 
-// Configuration
-const LOTTERY_CHAIN_ID = '5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e'
-const LOTTERY_APP_ID = '018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
-const LOTTERY_ENDPOINT = `http://localhost:8081/chains/${LOTTERY_CHAIN_ID}/applications/${LOTTERY_APP_ID}`
-const WS_URL = 'ws://localhost:8081/ws'
+config.loadEnv()
 
-const BOT_CHAIN_ID = 'f45a39ccd602efab007fd302589bcce1c115f903c268ed3d1c8c1eeb98a1c127'
-const BOT_ENDPOINT = `http://localhost:8084/chains/${BOT_CHAIN_ID}/applications/${LOTTERY_APP_ID}`
-const TARGET_OWNER = '0x0ac08e63dc28f0570b2b842e7bd8cfa3b17bd77cb29197f4e6b0b17183919b88'
-const BOT_OWNER = '0x1b9df7f664314174d7e90cb3f7a7aa6fe5fe90e3b5efaed6d50915adbba1b810'
+function extractChainId(endpointUrl) {
+  const m = endpointUrl.match(/\/chains\/([^/]+)/)
+  return m ? m[1] : null
+}
+
+function endpointToWsUrl(endpointUrl) {
+  const m = endpointUrl.match(/^http:\/\/([^/]+)/)
+  const host = m ? m[1] : null
+  return host ? `ws://${host}/ws` : null
+}
+
+const LOTTERY_ENDPOINT = process.env.LOTTERY_HTTP || config.endpoints.LOTTERY
+const LOTTERY_CHAIN_ID = extractChainId(LOTTERY_ENDPOINT)
+const WS_URL = endpointToWsUrl(LOTTERY_ENDPOINT)
+
+const BOT_ENDPOINT = process.env.LOTTERY_BOT_HTTP
+const TARGET_OWNER = process.env.VITE_LOTTERY_TARGET_OWNER || process.env.LOTTERY_TARGET_OWNER
+const BOT_OWNER = process.env.LOTTERY_BOT_OWNER
+
+if (!BOT_ENDPOINT) throw new Error('LOTTERY_BOT_HTTP env is required')
+if (!TARGET_OWNER) throw new Error('LOTTERY_TARGET_OWNER or VITE_LOTTERY_TARGET_OWNER env is required')
+if (!BOT_OWNER) throw new Error('LOTTERY_BOT_OWNER env is required')
 
 // State
 let lastProcessedRoundId = -1

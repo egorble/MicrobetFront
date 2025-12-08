@@ -2,8 +2,6 @@ const axios = require('axios')
 const WebSocket = require('ws')
 const { createClient } = require('@supabase/supabase-js')
 const config = require('./config')
-const fs = require('fs')
-const path = require('path')
 
 function now() { return new Date().toISOString() }
 function log() { const args = Array.from(arguments); console.log(`[${now()}] [lottery-sync]`, ...args) }
@@ -12,34 +10,25 @@ function error() { const args = Array.from(arguments); console.error(`[${now()}]
 function compactStr(v) { return String(v).replace(/\s+/g, ' ').trim() }
 function trunc(s, n = 1000) { try { const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t } catch { return '' } }
 
-function loadLocalEnv() {
-  const dirs = [__dirname, path.resolve(__dirname, '..')]
-  const files = ['.env', '.env.local']
-  for (const dir of dirs) {
-    for (const name of files) {
-      const p = path.join(dir, name)
-      if (fs.existsSync(p)) {
-        const text = fs.readFileSync(p, 'utf8')
-        for (const line of text.split(/\r?\n/)) {
-          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-          if (m) {
-            const k = m[1]
-            const v = m[2].replace(/^"|"$/g, '')
-            if (!process.env[k]) process.env[k] = v
-          }
-        }
-      }
-    }
-  }
-}
-
-loadLocalEnv()
+config.loadEnv()
 
 const SUPABASE_URL = process.env.SUPABASE_URL_LOTTERY || process.env.SUPABASE_URL || config.supabase?.url || 'https://oznvztsgrgfcithgnosn.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY_LOTTERY || process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
 
-const LOTTERY_HTTP = config.endpoints?.LOTTERY || 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
+let LOTTERY_HTTP = config.endpoints?.LOTTERY
+const overrideApplicationId = (endpoint, appId) => {
+  try {
+    const i = endpoint.indexOf('/applications/')
+    if (i === -1) return endpoint
+    const base = endpoint.substring(0, i + '/applications/'.length)
+    return base + String(appId)
+  } catch { return endpoint }
+}
+const LOTTERY_ROUNDS_APP_ID = process.env.LOTTERY_ROUNDS || ''
+if (LOTTERY_ROUNDS_APP_ID && LOTTERY_ROUNDS_APP_ID.length > 0) {
+  LOTTERY_HTTP = overrideApplicationId(LOTTERY_HTTP, LOTTERY_ROUNDS_APP_ID)
+}
 
 function extractChainId(endpointUrl) {
   const m = endpointUrl.match(/\/chains\/([^/]+)/)

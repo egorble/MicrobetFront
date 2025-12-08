@@ -1,29 +1,7 @@
 const PocketBase = require('pocketbase').default
-const fs = require('fs')
-const path = require('path')
+const config = require('./config')
 
-function loadLocalEnv() {
-  const dirs = [__dirname, path.resolve(__dirname, '..')]
-  const files = ['.env', '.env.local']
-  for (const dir of dirs) {
-    for (const name of files) {
-      const p = path.join(dir, name)
-      if (fs.existsSync(p)) {
-        const text = fs.readFileSync(p, 'utf8')
-        for (const line of text.split(/\r?\n/)) {
-          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-          if (m) {
-            const k = m[1]
-            const v = m[2].replace(/^"|"$/g, '')
-            if (!process.env[k]) process.env[k] = v
-          }
-        }
-      }
-    }
-  }
-}
-
-loadLocalEnv()
+config.loadEnv()
 
 const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090'
 const pb = (() => {

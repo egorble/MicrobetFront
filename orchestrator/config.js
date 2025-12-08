@@ -1,30 +1,54 @@
 /**
  * Конфігурація для Linera Prediction Game Orchestrator
  */
+const fs = require('fs')
+const path = require('path')
+
+function loadEnv() {
+  const dirs = [__dirname, path.resolve(__dirname, '..')]
+  const files = ['.env', '.env.local']
+  for (const dir of dirs) {
+    for (const name of files) {
+      const p = path.join(dir, name)
+      if (fs.existsSync(p)) {
+        const text = fs.readFileSync(p, 'utf8')
+        for (const line of text.split(/\r?\n/)) {
+          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+          if (m) {
+            const k = m[1]
+            const v = m[2].replace(/^"|"$/g, '')
+            if (!process.env[k]) process.env[k] = v
+          }
+        }
+      }
+    }
+  }
+}
 
 module.exports = {
+  loadEnv,
   // Ендпоінти Linera applications
   endpoints: {
-    BTC: 'http://localhost:8082/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315',
-    ETH: 'http://localhost:8083/chains/4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315',
-    LOTTERY: 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
+    BTC: process.env.BTC_HTTP,
+    ETH: process.env.ETH_HTTP,
+    LOTTERY: process.env.LOTTERY_HTTP
   },
 
   // Налаштування часу
   timing: {
     // Інтервал між циклами (мілісекунди)
-    intervalMs: 5 * 60 * 1000, // 5 хвилин
-    
+    intervalMs: 5 * 60 * 1000,
+
     // Затримка між мутаціями resolveRound та closeRound (мілісекунди)
-    mutationDelayMs: 400, // 400мс
-    
+    mutationDelayMs: 400,
+
     // Таймаут для HTTP запитів (мілісекунди)
-    httpTimeoutMs: 10000 // 10 секунд
+    httpTimeoutMs: 10000
   },
 
   supabase: {
-    url: 'https://oznvztsgrgfcithgnosn.supabase.co',
-    serviceRoleKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bnZ6dHNncmdmY2l0aGdub3NuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzgyNzc3MywiZXhwIjoyMDc5NDAzNzczfQ.8ge0Whdgm9C2Lnoj8w85fAtEc961IGL2XOWtrXWdOD8"
+    url: process.env.SUPABASE_URL || 'https://oznvztsgrgfcithgnosn.supabase.co',
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
   },
 
   // Налаштування Binance API
@@ -45,13 +69,13 @@ module.exports = {
   logging: {
     // Показувати детальні логи
     verbose: true,
-    
+
     // Показувати емодзі в логах
     useEmojis: true,
-    
+
     // Логувати помилки в файл
     logErrorsToFile: false,
-    
+
     // Шлях до файлу логів (якщо logErrorsToFile = true)
     errorLogPath: './orchestrator-errors.log'
   },
@@ -61,7 +85,7 @@ module.exports = {
     // Швидкий режим для тестування (кожні 30 секунд)
     fastMode: false,
     fastModeIntervalMs: 30 * 1000,
-    
+
     // Використовувати тестові ціни замість Binance API
     useTestPrices: false,
     testPrices: {
@@ -69,4 +93,4 @@ module.exports = {
       ETH: 3456.78
     }
   }
-};
+}

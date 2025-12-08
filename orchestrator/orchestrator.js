@@ -1,9 +1,26 @@
 const axios = require('axios');
 const config = require('./config');
 
+config.loadEnv();
+
 // Отримуємо конфігурацію
-const BTC_ENDPOINT = config.endpoints.BTC;
-const ETH_ENDPOINT = config.endpoints.ETH;
+let BTC_ENDPOINT = config.endpoints.BTC;
+let ETH_ENDPOINT = config.endpoints.ETH;
+const ROUNDS_APP_ID = process.env.ROUNDS || process.env.ROUNDS_APP_ID || '';
+
+function overrideApplicationId(endpoint, appId) {
+  try {
+    const i = endpoint.indexOf('/applications/');
+    if (i === -1) return endpoint;
+    const base = endpoint.substring(0, i + '/applications/'.length);
+    return base + String(appId);
+  } catch { return endpoint; }
+}
+
+if (ROUNDS_APP_ID && ROUNDS_APP_ID.length > 0) {
+  BTC_ENDPOINT = overrideApplicationId(BTC_ENDPOINT, ROUNDS_APP_ID);
+  ETH_ENDPOINT = overrideApplicationId(ETH_ENDPOINT, ROUNDS_APP_ID);
+}
 const INTERVAL_MS = config.development.fastMode ? config.development.fastModeIntervalMs : config.timing.intervalMs;
 const MUTATION_DELAY_MS = config.timing.mutationDelayMs;
 
@@ -84,6 +101,20 @@ async function processCurrency(endpoint, currency, symbol) {
     const currentPrice = await getCurrentPrice(symbol);
     console.log(`${emoji ? '💰' : '[PRICE]'} Поточна ціна ${currency}: $${currentPrice.toFixed(2)}`);
 
+    // Якщо немає активного раунду — відкриваємо новий
+    const active = await getActiveRound(endpoint);
+    if (!active) {
+      const openMutation = `mutation { openRound }`;
+      console.log(`${emoji ? '🟢' : '[OPEN]'} Виконуємо openRound для ${currency}...`);
+      try {
+        const openRes = await executeMutation(endpoint, openMutation);
+        console.log(`${emoji ? '✅' : '[SUCCESS]'} openRound для ${currency}:`, openRes.data?.openRound || 'OK');
+      } catch (e) {
+        console.log(`${emoji ? '⚠️' : '[WARN]'} openRound пропущено/помилка для ${currency}:`, e?.message || e);
+      }
+      await new Promise(resolve => setTimeout(resolve, MUTATION_DELAY_MS));
+    }
+
     // 1. Виконуємо resolveRound мутацію
     const resolveMutation = `
       mutation {
@@ -108,6 +139,19 @@ async function processCurrency(endpoint, currency, symbol) {
     console.log(`${emoji ? '🔒' : '[CLOSE]'} Виконуємо closeRound для ${currency} з ціною ${currentPrice}...`);
     const closeResult = await executeMutation(endpoint, closeMutation);
     console.log(`${emoji ? '✅' : '[SUCCESS]'} closeRound для ${currency} виконано:`, closeResult.data?.closeRound || 'OK');
+
+    // 3. Після закриття — відкриваємо новий раунд, якщо потрібен
+    const againActive = await getActiveRound(endpoint);
+    if (!againActive) {
+      const openMutation2 = `mutation { openRound }`;
+      console.log(`${emoji ? '🟢' : '[OPEN]'} Відкриваємо новий раунд для ${currency}...`);
+      try {
+        const openRes2 = await executeMutation(endpoint, openMutation2);
+        console.log(`${emoji ? '✅' : '[SUCCESS]'} openRound (post-close) для ${currency}:`, openRes2.data?.openRound || 'OK');
+      } catch (e) {
+        console.log(`${emoji ? '⚠️' : '[WARN]'} openRound (post-close) пропущено/помилка для ${currency}:`, e?.message || e);
+      }
+    }
 
   } catch (error) {
     const emoji = config.logging.useEmojis;
@@ -150,6 +194,9 @@ async function startOrchestrator() {
   console.log(`${emoji ? '🎯' : '[INIT]'} Запуск Linera Prediction Game Orchestrator`);
   console.log(`${emoji ? '📡' : '[CONFIG]'} BTC Endpoint: ${BTC_ENDPOINT}`);
   console.log(`${emoji ? '📡' : '[CONFIG]'} ETH Endpoint: ${ETH_ENDPOINT}`);
+  if (ROUNDS_APP_ID && ROUNDS_APP_ID.length > 0) {
+    console.log(`${emoji ? '🧩' : '[CONFIG]'} Використовується ROUNDS AppId: ${ROUNDS_APP_ID}`);
+  }
   console.log(`${emoji ? '⏱️' : '[CONFIG]'} Інтервал: ${INTERVAL_MS / 1000 / 60} хвилин`);
   console.log(`${emoji ? '⚡' : '[CONFIG]'} Затримка між мутаціями: ${MUTATION_DELAY_MS}мс`);
   
@@ -197,3 +244,18 @@ module.exports = {
   executeMutation,
   processCurrency
 };
+async function executeQuery(endpoint, query) {
+  const response = await axios.post(endpoint, { query }, { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, timeout: config.timing.httpTimeoutMs });
+  if (response.data?.errors) {
+    throw new Error(`GraphQL помилки: ${JSON.stringify(response.data.errors)}`);
+  }
+  return response.data?.data || {};
+}
+
+async function getActiveRound(endpoint) {
+  const q = `query { allRounds { id status } }`;
+  const data = await executeQuery(endpoint, q);
+  const rounds = data?.allRounds || [];
+  const active = rounds.filter(r => String(r.status).toUpperCase() === 'ACTIVE').sort((a,b) => Number(b.id) - Number(a.id))[0];
+  return active || null;
+}

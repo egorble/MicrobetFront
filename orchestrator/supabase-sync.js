@@ -2,31 +2,8 @@ const axios = require('axios')
 const WebSocket = require('ws')
 const PocketBase = require('pocketbase').default
 const config = require('./config')
-const fs = require('fs')
-const path = require('path')
 
-function loadLocalEnv() {
-  const dirs = [__dirname, path.resolve(__dirname, '..')]
-  const files = ['.env', '.env.local']
-  for (const dir of dirs) {
-    for (const name of files) {
-      const p = path.join(dir, name)
-      if (fs.existsSync(p)) {
-        const text = fs.readFileSync(p, 'utf8')
-        for (const line of text.split(/\r?\n/)) {
-          const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-          if (m) {
-            const k = m[1]
-            const v = m[2].replace(/^"|"$/g, '')
-            if (!process.env[k]) process.env[k] = v
-          }
-        }
-      }
-    }
-  }
-}
-
-loadLocalEnv()
+config.loadEnv()
 
 const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090'
 const pb = (() => {
@@ -46,8 +23,27 @@ function endpointToWsUrl(endpointUrl) {
   return host ? `ws://${host}/ws` : null
 }
 
-const BTC_HTTP = config.endpoints.BTC
-const ETH_HTTP = config.endpoints.ETH
+let BTC_HTTP = config.endpoints.BTC
+let ETH_HTTP = config.endpoints.ETH
+const overrideApplicationId = (endpoint, appId) => {
+  try {
+    const i = endpoint.indexOf('/applications/')
+    if (i === -1) return endpoint
+    const base = endpoint.substring(0, i + '/applications/'.length)
+    return base + String(appId)
+  } catch { return endpoint }
+}
+
+const ROUNDS_APP_ID = process.env.ROUNDS || process.env.ROUNDS_APP_ID || ''
+const MICROBETREAL_APP_ID = process.env.MICROBETREAL || process.env.MICROBET_REAL || ''
+if (ROUNDS_APP_ID && ROUNDS_APP_ID.length > 0) {
+  BTC_HTTP = overrideApplicationId(BTC_HTTP, ROUNDS_APP_ID)
+  ETH_HTTP = overrideApplicationId(ETH_HTTP, ROUNDS_APP_ID)
+} else if (MICROBETREAL_APP_ID && MICROBETREAL_APP_ID.length > 0) {
+  BTC_HTTP = overrideApplicationId(BTC_HTTP, MICROBETREAL_APP_ID)
+  ETH_HTTP = overrideApplicationId(ETH_HTTP, MICROBETREAL_APP_ID)
+}
+
 const BTC_CHAIN_ID = extractChainId(BTC_HTTP)
 const ETH_CHAIN_ID = extractChainId(ETH_HTTP)
 const BTC_WS = endpointToWsUrl(BTC_HTTP)
@@ -239,6 +235,9 @@ async function handleEthEvent() {
 async function main() {
   console.log('Starting PocketBase sync daemon')
   console.log('PocketBase URL', PB_URL)
+  console.log('ROUNDS AppId', ROUNDS_APP_ID || '(default from config)')
+  console.log('BTC_HTTP', BTC_HTTP)
+  console.log('ETH_HTTP', ETH_HTTP)
   await initialSync()
   console.log('Connecting BTC WS')
   makeWs(BTC_WS, BTC_CHAIN_ID, handleBtcEvent)

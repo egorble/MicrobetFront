@@ -1,12 +1,12 @@
-import { TrendingUp, Wallet, RefreshCw, ChevronDown, Plus, Minus, Ticket, Sun, Moon } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, ChevronDown, Plus, Minus, Ticket, Sun, Moon, Trophy } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "./ThemeProvider";
 
 interface HeaderProps {
-  gameMode: 'prediction' | 'lottery';
-  setGameMode: (mode: 'prediction' | 'lottery') => void;
+  gameMode: 'prediction' | 'lottery' | 'leaderboard';
+  setGameMode: (mode: 'prediction' | 'lottery' | 'leaderboard') => void;
 }
 
 export function Header({ gameMode, setGameMode }: HeaderProps) {
@@ -400,12 +400,26 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
               </div>
             )}
 
+            {/* Leaderboard Button */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setGameMode('leaderboard')}
+              className={`ml-1 rounded-full w-9 h-9 border-gray-200 dark:border-zinc-800 transition-colors ${gameMode === 'leaderboard'
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-500 border-yellow-200 dark:border-yellow-800'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+                }`}
+              title="Leaderboard"
+            >
+              <Trophy className="w-4 h-4" />
+            </Button>
+
             {/* Theme Toggle */}
             <Button
               variant="outline"
               size="icon"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="ml-2 rounded-full w-9 h-9 border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+              className="ml-1 rounded-full w-9 h-9 border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
             >
               {theme === 'dark' ? (
                 <Sun className="w-4 h-4" />

@@ -1,7 +1,22 @@
 const axios = require('axios')
 const WebSocket = require('ws')
+const config = require('./config')
 
-const LOTTERY_HTTP = 'http://localhost:8081/chains/5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e/applications/018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1'
+config.loadEnv()
+
+let LOTTERY_HTTP = config.endpoints.LOTTERY
+const overrideApplicationId = (endpoint, appId) => {
+  try {
+    const i = endpoint.indexOf('/applications/')
+    if (i === -1) return endpoint
+    const base = endpoint.substring(0, i + '/applications/'.length)
+    return base + String(appId)
+  } catch { return endpoint }
+}
+const LOTTERY_ROUNDS_APP_ID = process.env.LOTTERY_ROUNDS || ''
+if (LOTTERY_ROUNDS_APP_ID && LOTTERY_ROUNDS_APP_ID.length > 0) {
+  LOTTERY_HTTP = overrideApplicationId(LOTTERY_HTTP, LOTTERY_ROUNDS_APP_ID)
+}
 
 function now() { return new Date().toISOString() }
 function log() { const args = Array.from(arguments); console.log(`[${now()}] [lottery-orchestrator]`, ...args) }
