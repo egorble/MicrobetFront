@@ -4,7 +4,6 @@ import { ChartTabs } from "./components/ChartTabs";
 import { LineraProvider, useLinera } from "./components/LineraProvider";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { LotterySection } from "./components/LotterySection";
-import { Leaderboard } from "./components/Leaderboard";
 import { MobileInstallPrompt } from "./components/MobileInstallPrompt";
 import { MobileOrientationHandler } from "./components/MobileOrientationHandler";
 import { MobileSplashScreen } from "./components/MobileSplashScreen";
@@ -36,7 +35,7 @@ function AppContent() {
   const [timeLeft, setTimeLeft] = useState<string>('00:00');
   const [showSplash, setShowSplash] = useState(mobile.isMobile);
   const [appReady, setAppReady] = useState(false);
-  const [gameMode, setGameMode] = useState<'prediction' | 'lottery' | 'leaderboard'>('prediction');
+  const [gameMode, setGameMode] = useState<'prediction' | 'lottery'>('prediction');
 
   // Отримуємо активні rounds в залежності від вибраної вкладки
   const activeRounds = activeTab === 'btc' ? btcRounds : ethRounds;
@@ -324,16 +323,12 @@ function AppContent() {
               <ChartTabs selectedToken={selectedToken} />
             </main>
           </>
-        ) : gameMode === 'lottery' ? (
+        ) : (
           <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
             <div className="mb-6 sm:mb-8">
               <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 px-1">Lottery Rounds</h2>
               <LotterySection />
             </div>
-          </main>
-        ) : (
-          <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 main-content">
-            <Leaderboard />
           </main>
         )}
 

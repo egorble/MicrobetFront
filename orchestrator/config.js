@@ -23,13 +23,34 @@ function loadEnv() {
       }
     }
   }
+  const keys = Object.keys(process.env)
+  function expand(str) {
+    let out = String(str)
+    const re = /\$\{([A-Z0-9_]+)\}/g
+    for (let i = 0; i < 3; i++) {
+      let changed = false
+      out = out.replace(re, (_, k) => {
+        const val = process.env[k] || ''
+        changed = true
+        return val
+      })
+      if (!changed) break
+    }
+    return out
+  }
+  for (const k of keys) {
+    const v = process.env[k]
+    if (typeof v === 'string' && v.includes('${')) {
+      process.env[k] = expand(v)
+    }
+  }
 }
 
 const endpoints = {}
 Object.defineProperties(endpoints, {
-  BTC: { enumerable: true, get() { return process.env.BTC_HTTP } },
-  ETH: { enumerable: true, get() { return process.env.ETH_HTTP } },
-  LOTTERY: { enumerable: true, get() { return process.env.LOTTERY_HTTP } },
+  BTC: { enumerable: true, get() { return process.env.BTC_HTTP || process.env.VITE_BTC_ENDPOINT } },
+  ETH: { enumerable: true, get() { return process.env.ETH_HTTP || process.env.VITE_ETH_ENDPOINT } },
+  LOTTERY: { enumerable: true, get() { return process.env.LOTTERY_HTTP || process.env.VITE_LOTTERY_ENDPOINT } },
 })
 
 module.exports = {

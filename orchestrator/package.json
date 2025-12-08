@@ -14,10 +14,10 @@
     "test": "node -e \"console.log('Testing orchestrator...'); require('./orchestrator.js')\""
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.81.1",
     "axios": "^1.6.0",
     "graphql-request": "^7.3.3",
     "pg": "^8.12.0",
+    "pocketbase": "^0.21.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

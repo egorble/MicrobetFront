@@ -368,18 +368,11 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
     lastLotteryFetchRef.current = now;
 
-    // 1. Fetch rounds descending (newest first)
-    const { data: dbRounds } = await supabaseLottery
-      .from('lottery_rounds')
-      .select('*')
-      .order('id', { ascending: false })
-      .limit(30);
+    const resRounds = await pb.collection('lottery_rounds').getList(1, 30, { sort: '-round_id', requestKey: 'lottery_rounds' })
+    const dbRounds = (resRounds?.items || []) as any[]
 
-    const { data: latestWinners } = await supabaseLottery
-      .from('lottery_winners')
-      .select('round_id,ticket_number,source_chain_id,prize_amount,created_at')
-      .order('created_at', { ascending: false })
-      .limit(50);
+    const resWinners = await pb.collection('lottery_winners').getList(1, 50, { sort: '-round_id', requestKey: 'lottery_winners' })
+    const latestWinners = (resWinners?.items || []) as any[]
 
     const winnersByRound = new Map<number, Winner[]>();
     const seenTickets = new Set<string>();
@@ -388,7 +381,8 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const roundId = Number(w.round_id);
       const ticketId = String(w.ticket_number);
       const uniqueKey = `${roundId}-${ticketId}`;
-      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now();
+      const createdRaw = w.created_at ?? w.created;
+      const createdAt = createdRaw ? (toMs(createdRaw) ?? Date.now()) : Date.now();
 
       if (seenTickets.has(uniqueKey)) return;
       seenTickets.add(uniqueKey);
@@ -411,7 +405,8 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const ticketId = String(w.ticket_number);
       const roundId = Number(w.round_id);
       const uniqueKey = `${roundId}-${ticketId}`;
-      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now();
+      const createdRaw = w.created_at ?? w.created;
+      const createdAt = createdRaw ? (toMs(createdRaw) ?? Date.now()) : Date.now();
 
       if (seenGlobalTickets.has(uniqueKey)) return;
       if (mappedWinners.length >= 50) return;
@@ -434,13 +429,13 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const createdMs = r.created_at ? (toMs(r.created_at) ?? Date.now()) : Date.now();
       const endMs = createdMs + 5 * 60 * 1000;
       const statusUpper = String(r.status).toUpperCase() as LotteryStatus;
-      let winners: Winner[] = winnersByRound.get(r.id) || [];
+      let winners: Winner[] = winnersByRound.get(Number(r.round_id)) || [];
 
       // Sort winners deterministically to prevent UI duplication during reveal animation
       winners.sort((a, b) => Number(b.ticketId) - Number(a.ticketId));
 
       return {
-        id: String(r.id),
+        id: String(r.round_id),
         status: statusUpper,
         prizePool: String(r.prize_pool),
         ticketPrice: String(r.ticket_price),
@@ -853,22 +848,19 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     refreshLottery();
 
-    const chRounds = supabaseLottery
-      .channel('lottery_rounds_changes_global')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lottery_rounds' }, (payload: any) => { applyRoundUpsert(payload) })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lottery_rounds' }, (payload: any) => { applyRoundUpsert(payload) })
-      .subscribe();
-    const chWinners = supabaseLottery
-      .channel('lottery_winners_changes_global')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lottery_winners' }, (payload: any) => { applyWinnerInsert(payload) })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lottery_winners' }, (payload: any) => { applyWinnerInsert(payload) })
-      .subscribe();
+    let unsubRounds: any = null
+    let unsubWinners: any = null
+    const setup = async () => {
+      try { unsubRounds = await pb.collection('lottery_rounds').subscribe('*', () => { refreshLottery() }) } catch {}
+      try { unsubWinners = await pb.collection('lottery_winners').subscribe('*', () => { refreshLottery() }) } catch {}
+    }
+    setup()
 
     return () => {
-      supabaseLottery.removeChannel(chRounds);
-      supabaseLottery.removeChannel(chWinners);
+      try { pb.collection('lottery_rounds').unsubscribe('*') } catch {}
+      try { pb.collection('lottery_winners').unsubscribe('*') } catch {}
     };
-  }, [state.lotteryApplication]); // Re-run when lotteryApplication becomes available to sync GQL
+  }, [state.lotteryApplication]);
 
   // Окремий useEffect для cleanup при unmount компонента
   useEffect(() => {

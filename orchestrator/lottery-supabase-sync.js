@@ -1,6 +1,6 @@
 const axios = require('axios')
 const WebSocket = require('ws')
-const { createClient } = require('@supabase/supabase-js')
+const PocketBase = require('pocketbase').default
 const config = require('./config')
 
 function now() { return new Date().toISOString() }
@@ -12,9 +12,12 @@ function trunc(s, n = 1000) { try { const t = String(s); return t.length > n ? t
 
 config.loadEnv()
 
-const SUPABASE_URL = process.env.SUPABASE_URL_LOTTERY || process.env.SUPABASE_URL || config.supabase?.url || 'https://oznvztsgrgfcithgnosn.supabase.co'
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY_LOTTERY || process.env.SUPABASE_SERVICE_ROLE_KEY || config.supabase?.serviceRoleKey
-const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null
+const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090'
+const pb = (() => {
+  const c = new PocketBase(PB_URL)
+  try { c.autoCancellation(false) } catch {}
+  return c
+})()
 
 let LOTTERY_HTTP = config.endpoints?.LOTTERY
 const overrideApplicationId = (endpoint, appId) => {
@@ -141,19 +144,33 @@ async function fetchRoundWinners(roundId) {
   return winners
 }
 
+async function findWinner(roundId, ticketNumber, sourceChainId) {
+  try {
+    const filter = `round_id = ${Number(roundId)} && ticket_number ~ "${String(ticketNumber)}" && source_chain_id ~ "${String(sourceChainId)}"`
+    const rec = await pb.collection('lottery_winners').getFirstListItem(filter, { requestKey: `lw-${roundId}-${ticketNumber}-${sourceChainId}` })
+    return rec || null
+  } catch { return null }
+}
+
 async function upsertWinners(roundId) {
-  if (!supabase) throw new Error('Supabase not configured')
   const winners = await fetchRoundWinners(roundId)
   if (!winners || winners.length === 0) return
-  const rows = winners.map(w => mapWinner(roundId, w))
-  const { error: upsertError } = await supabase
-    .from('lottery_winners')
-    .upsert(rows, { onConflict: 'round_id,ticket_number,source_chain_id' })
-  if (upsertError) {
-    try { error('lottery_winners upsert error', upsertError.message) } catch {}
-  } else {
-    try { log('upsert winners batch count=' + rows.length + ' roundId=' + roundId) } catch {}
+  let created = 0, updated = 0
+  for (const w of winners) {
+    const data = mapWinner(roundId, w)
+    const existing = await findWinner(data.round_id, data.ticket_number, data.source_chain_id)
+    if (existing && existing.id) {
+      try { await pb.collection('lottery_winners').update(existing.id, data); updated += 1 } catch (e) { try { error('lottery_winners update error', e?.message || e) } catch {} }
+    } else {
+      try { await pb.collection('lottery_winners').create(data); created += 1 } catch (e) {
+        try {
+          const fallback = await findWinner(data.round_id, data.ticket_number, data.source_chain_id)
+          if (fallback && fallback.id) { await pb.collection('lottery_winners').update(fallback.id, data); updated += 1 }
+        } catch {}
+      }
+    }
   }
+  try { log('upsert winners pb created=' + created + ' updated=' + updated + ' roundId=' + roundId) } catch {}
 }
 
 // removed duplicate mapRound (use the detailed mapper below)
@@ -192,7 +209,7 @@ function mapRound(r) {
   const closedIso = closedMs ? new Date(closedMs).toISOString() : null
   try { console.log(`[lottery-sync] mapRound id=${r.id} status=${r.status} rawCreated=${r.createdAt} rawClosed=${r.closedAt} createdMs=${createdMs} closedMs=${closedMs} now=${Date.now()} diffCreatedMs=${createdMs != null ? Date.now() - createdMs : 'n/a'}`) } catch {}
   return {
-    id: Number(r.id),
+    round_id: Number(r.id),
     status: String(r.status),
     ticket_price: String(r.ticketPrice),
     total_tickets_sold: Number(r.totalTicketsSold),
@@ -202,18 +219,31 @@ function mapRound(r) {
   }
 }
 
+async function findRound(roundId) {
+  try {
+    const rec = await pb.collection('lottery_rounds').getFirstListItem(`round_id = ${Number(roundId)}`, { requestKey: `lr-${roundId}` })
+    return rec || null
+  } catch { return null }
+}
+
 async function upsertRounds(rounds) {
-  if (!supabase) throw new Error('Supabase not configured')
   const payload = rounds.map(mapRound)
   if (!payload.length) return
-  const { error: upsertError } = await supabase
-    .from('lottery_rounds')
-    .upsert(payload, { onConflict: 'id' })
-  if (upsertError) {
-    try { error('upsert rounds error', upsertError.message) } catch {}
-  } else {
-    try { log('upsert rounds batch count=' + payload.length) } catch {}
+  let created = 0, updated = 0
+  for (const data of payload) {
+    const existing = await findRound(data.round_id)
+    if (existing && existing.id) {
+      try { await pb.collection('lottery_rounds').update(existing.id, data); updated += 1 } catch (e) { try { error('lottery_rounds update error', e?.message || e) } catch {} }
+    } else {
+      try { await pb.collection('lottery_rounds').create(data); created += 1 } catch (e) {
+        try {
+          const fallback = await findRound(data.round_id)
+          if (fallback && fallback.id) { await pb.collection('lottery_rounds').update(fallback.id, data); updated += 1 }
+        } catch {}
+      }
+    }
   }
+  try { log('upsert rounds pb created=' + created + ' updated=' + updated) } catch {}
 }
 
 let syncing = false
