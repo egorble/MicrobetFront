@@ -2,7 +2,19 @@
 set -euo pipefail
 
 FAUCET_URL=${FAUCET_URL:-https://faucet.testnet-conway.linera.net}
-LINERA_TMP_DIR=${LINERA_TMP_DIR:-${HOME}/linera-tmp}
+
+# Detect service user and linera binary
+SERVICE_USER=${SERVICE_USER:-${SUDO_USER:-$(id -un)}}
+USER_HOME=$(getent passwd "$SERVICE_USER" | cut -d: -f6)
+[ -z "$USER_HOME" ] && USER_HOME="/home/${SERVICE_USER}"
+LINERA_BIN=$(command -v linera || true)
+if [ -z "$LINERA_BIN" ]; then
+  echo "ERROR: 'linera' binary not found in PATH. Ensure it's installed (e.g., ~/.cargo/bin/linera) or set LINERA_BIN to absolute path." >&2
+  exit 127
+fi
+
+# Use per-user tmp dir unless explicitly overridden
+LINERA_TMP_DIR=${LINERA_TMP_DIR:-${USER_HOME}/linera-tmp}
 
 ENV_PATH=${ENV_PATH:-$(cd "$(dirname "$0")/.."; pwd)/.env}
 touch "${ENV_PATH}"
@@ -35,6 +47,7 @@ fi
 
 rm -rf "${LINERA_TMP_DIR}" || true
 mkdir -p "${LINERA_TMP_DIR}"
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "${LINERA_TMP_DIR}" >/dev/null 2>&1 || true
 
 export LINERA_WALLET_1="${LINERA_TMP_DIR}/wallet_1.json"
 export LINERA_KEYSTORE_1="${LINERA_TMP_DIR}/keystore_1.json"
@@ -108,10 +121,13 @@ Description=${desc}
 After=network.target
 
 [Service]
+User=${SERVICE_USER}
+Group=${SERVICE_USER}
 Environment=LINERA_WALLET_${wallet}=${WALLET_VAR}
 Environment=LINERA_KEYSTORE_${wallet}=${KEYSTORE_VAR}
 Environment=LINERA_STORAGE_${wallet}=${STORAGE_VAR}
-ExecStart=/usr/bin/env linera --with-wallet ${wallet} service --port ${port}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:${USER_HOME}/.cargo/bin
+ExecStart=${LINERA_BIN} --with-wallet ${wallet} service --port ${port}
 Restart=always
 RestartSec=5
 WorkingDirectory=${LINERA_TMP_DIR}
