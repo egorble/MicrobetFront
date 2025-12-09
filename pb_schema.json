@@ -199,4 +199,120 @@
     "indexes": [],
     "system": false
   }
-]
+  ,
+  {
+    "id": "pbc_325001111",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "name": "leaderboard_players",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text1000000001",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "text1000000002",
+        "max": 256,
+        "min": 0,
+        "name": "owner",
+        "pattern": "^.+$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "text1000000003",
+        "max": 128,
+        "min": 0,
+        "name": "chain_id",
+        "pattern": "^.+$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "text1000000005",
+        "max": 8,
+        "min": 0,
+        "name": "chain",
+        "pattern": "^(btc|eth)$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "number1000000004",
+        "max": null,
+        "min": 0,
+        "name": "wins",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "number1000000005",
+        "max": null,
+        "min": 0,
+        "name": "losses",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "number1000000006",
+        "max": null,
+        "min": 0,
+        "name": "total_won",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "number1000000007",
+        "max": null,
+        "min": 0,
+        "name": "total_lost",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      }
+    ],
+    "indexes": [],
+    "system": false
+  }
+    ]

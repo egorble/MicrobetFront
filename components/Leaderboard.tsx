@@ -1,4 +1,14 @@
 import { Trophy, Search, ChevronDown, User, Sparkles, Medal } from "lucide-react";
+import { useEffect, useState } from "react";
+import PocketBase from "pocketbase";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "./ui/dropdown-menu";
 import {
     Table,
     TableBody,
@@ -7,21 +17,84 @@ import {
     TableHeader,
     TableRow,
 } from "./ui/table";
+const PB_URL: string = ((import.meta.env as any).VITE_POCKETBASE_URL as string) || "http://127.0.0.1:8090";
+const pb: PocketBase = (() => {
+  const g = globalThis as any;
+  if (g.__pb_client) return g.__pb_client as PocketBase;
+  const c = new PocketBase(PB_URL);
+  try { c.autoCancellation(false) } catch {}
+  g.__pb_client = c;
+  return c;
+})();
 
-const MOCK_LEADERS = [
-    { rank: 1, user: "0xd8...8e6c", totalWon: "258,645", winRate: "53.54%", roundsWon: "44528/83175" },
-    { rank: 2, user: "SuperBlade", totalWon: "127,587", winRate: "50.57%", roundsWon: "38276/75682" },
-    { rank: 3, user: "0xc2...0491", totalWon: "114,954", winRate: "48.15%", roundsWon: "35965/74698" },
-    { rank: 4, user: "0xa1...b2c3", totalWon: "98,432", winRate: "55.12%", roundsWon: "21345/38721" },
-    { rank: 5, user: "CryptoKing", totalWon: "87,654", winRate: "61.23%", roundsWon: "18543/30284" },
-    { rank: 6, user: "0xff...00aa", totalWon: "76,543", winRate: "49.88%", roundsWon: "28432/57001" },
-    { rank: 7, user: "MoonWalker", totalWon: "65,432", winRate: "52.45%", roundsWon: "15432/29423" },
-    { rank: 8, user: "0x12...3456", totalWon: "54,321", winRate: "47.99%", roundsWon: "22134/46123" },
-];
+interface LeaderRow {
+  rank: number;
+  user: string;
+  totalWon: string;
+  winRate: string;
+  roundsWon: string;
+  _wins?: number;
+  _losses?: number;
+  _totalWonNum?: number;
+}
 
 export function Leaderboard() {
-    const topThree = MOCK_LEADERS.slice(0, 3);
-    const others = MOCK_LEADERS.slice(3);
+    const [leaders, setLeaders] = useState<LeaderRow[]>([]);
+    const [activeChain, setActiveChain] = useState<'btc' | 'eth'>('btc');
+    const [sortBy, setSortBy] = useState<'total_won' | 'win_rate' | 'rounds'>("total_won");
+
+    useEffect(() => {
+      let unsub: any = null;
+      const fetchLeaders = async () => {
+        const options: any = { requestKey: `leaderboard_${activeChain}` };
+        options.filter = `chain = \"${activeChain}\"`;
+        if (sortBy === 'total_won') options.sort = '-total_won';
+        const res = await pb.collection("leaderboard_players").getList(1, 1000, options);
+        const items = res?.items || [];
+        const mapped: LeaderRow[] = items.map((r: any, idx: number) => {
+          const wins = Number(r.wins || 0);
+          const losses = Number(r.losses || 0);
+          const total = wins + losses;
+          const rate = total > 0 ? Math.round((wins / total) * 10000) / 100 : 0;
+          const totalWon = Number(r.total_won || 0);
+          return {
+            rank: idx + 1,
+            user: String(r.owner || ""),
+            totalWon: totalWon.toLocaleString(),
+            winRate: `${rate}%`,
+            roundsWon: `${wins}/${total}`,
+            _wins: wins,
+            _losses: losses,
+            _totalWonNum: totalWon,
+          };
+        });
+        setLeaders(mapped);
+      };
+      fetchLeaders();
+      (async () => { try { unsub = await pb.collection("leaderboard_players").subscribe("*", fetchLeaders) } catch {} })();
+      return () => { try { if (unsub) unsub() } catch {} };
+    }, [activeChain, sortBy]);
+
+    const sorted = (() => {
+      const by = sortBy;
+      const arr = leaders.slice();
+      if (by === 'total_won') {
+        arr.sort((a, b) => (b._totalWonNum || 0) - (a._totalWonNum || 0));
+      } else if (by === 'win_rate') {
+        const rate = (x: LeaderRow) => {
+          const w = x._wins || 0; const l = x._losses || 0; const t = w + l;
+          return t > 0 ? w / t : 0;
+        }
+        arr.sort((a, b) => rate(b) - rate(a));
+      } else if (by === 'rounds') {
+        const rounds = (x: LeaderRow) => (x._wins || 0) + (x._losses || 0);
+        arr.sort((a, b) => rounds(b) - rounds(a));
+      }
+      return arr.map((x, i) => ({ ...x, rank: i + 1 }));
+    })();
+
+    const topThree = sorted.slice(0, 3);
+    const others = sorted.slice(3);
 
     return (
         <div className="w-full relative overflow-hidden">
@@ -40,26 +113,37 @@ export function Leaderboard() {
                     <div className="flex flex-wrap gap-4">
 
                         {/* BTC */}
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl cursor-pointer border border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                            <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-900 shadow-sm">
-                                ₿
-                            </div>
-                            <span className="font-bold text-sm text-gray-700 dark:text-gray-200">BTC</span>
+                        <div onClick={() => setActiveChain('btc')} className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer border transition-colors ${activeChain === 'btc' ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}>
+                          <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-900 shadow-sm">
+                            ₿
+                          </div>
+                          <span className="font-bold text-sm text-gray-700 dark:text-gray-200">BTC</span>
                         </div>
 
                         {/* ETH */}
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl cursor-pointer border border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-900 shadow-sm">
-                                Ξ
-                            </div>
-                            <span className="font-bold text-sm text-gray-700 dark:text-gray-200">ETH</span>
+                        <div onClick={() => setActiveChain('eth')} className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer border transition-colors ${activeChain === 'eth' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}>
+                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-900 shadow-sm">
+                            Ξ
+                          </div>
+                          <span className="font-bold text-sm text-gray-700 dark:text-gray-200">ETH</span>
                         </div>
 
                         {/* Rank By */}
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl cursor-pointer border border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
-                            <span className="font-bold text-sm text-gray-700 dark:text-gray-200">Rank By: Total Won</span>
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-zinc-900 rounded-xl cursor-pointer border border-gray-100 dark:border-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+                              <span className="font-bold text-sm text-gray-700 dark:text-gray-200">Rank By: {sortBy === 'total_won' ? 'Total Won' : sortBy === 'win_rate' ? 'Win Rate' : 'Rounds Played'}</span>
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                            </div>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent sideOffset={8} className="min-w-[12rem]">
+                            <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                              <DropdownMenuRadioItem value="total_won">Total Won</DropdownMenuRadioItem>
+                              <DropdownMenuRadioItem value="win_rate">Win Rate</DropdownMenuRadioItem>
+                              <DropdownMenuRadioItem value="rounds">Rounds Played</DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
 
                     {/* Search */}

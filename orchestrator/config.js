@@ -46,11 +46,17 @@ function loadEnv() {
   }
 }
 
+function cleanEndpoint(s) {
+  return String(s || '').replace(/\s+/g, '')
+}
+
 const endpoints = {}
 Object.defineProperties(endpoints, {
-  BTC: { enumerable: true, get() { return process.env.BTC_HTTP || process.env.VITE_BTC_ENDPOINT } },
-  ETH: { enumerable: true, get() { return process.env.ETH_HTTP || process.env.VITE_ETH_ENDPOINT } },
-  LOTTERY: { enumerable: true, get() { return process.env.LOTTERY_HTTP || process.env.VITE_LOTTERY_ENDPOINT } },
+  BTC: { enumerable: true, get() { const v = process.env.BTC_HTTP || process.env.VITE_BTC_ENDPOINT; return cleanEndpoint(v) } },
+  ETH: { enumerable: true, get() { const v = process.env.ETH_HTTP || process.env.VITE_ETH_ENDPOINT; return cleanEndpoint(v) } },
+  LOTTERY: { enumerable: true, get() { const v = process.env.LOTTERY_HTTP || process.env.VITE_LOTTERY_ENDPOINT; return cleanEndpoint(v) } },
+  LEADERBOARD_BTC: { enumerable: true, get() { const v = process.env.LEADERBOARD_BTC_HTTP || process.env.VITE_LEADERBOARD_BTC_ENDPOINT || process.env.LEADERBOARD_HTTP || process.env.VITE_LEADERBOARD_ENDPOINT; return cleanEndpoint(v) } },
+  LEADERBOARD_ETH: { enumerable: true, get() { const v = process.env.LEADERBOARD_ETH_HTTP || process.env.VITE_LEADERBOARD_ETH_ENDPOINT || process.env.LEADERBOARD_HTTP || process.env.VITE_LEADERBOARD_ENDPOINT; return cleanEndpoint(v) } },
 })
 
 module.exports = {

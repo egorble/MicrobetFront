@@ -11,6 +11,7 @@
     "lottery": "node lottery-orchestrator.js",
     "dev:lottery": "nodemon lottery-orchestrator.js",
     "test:lottery:supabase": "node test-lottery-supabase.js",
+    "leaderboard:sync": "node leaderboard-pb-sync.js",
     "test": "node -e \"console.log('Testing orchestrator...'); require('./orchestrator.js')\""
   },
   "dependencies": {

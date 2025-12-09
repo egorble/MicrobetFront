@@ -1,12 +1,12 @@
-import { TrendingUp, Wallet, RefreshCw, ChevronDown, Plus, Minus, Ticket, Sun, Moon } from "lucide-react";
+import { TrendingUp, Wallet, RefreshCw, ChevronDown, Plus, Minus, Ticket, Sun, Moon, Trophy } from "lucide-react";
 import { Button } from "./ui/button";
 import { useLinera } from "./LineraProvider";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "./ThemeProvider";
 
 interface HeaderProps {
-  gameMode: 'prediction' | 'lottery';
-  setGameMode: (mode: 'prediction' | 'lottery') => void;
+  gameMode: 'prediction' | 'lottery' | 'leaderboard';
+  setGameMode: (mode: 'prediction' | 'lottery' | 'leaderboard') => void;
 }
 
 export function Header({ gameMode, setGameMode }: HeaderProps) {
@@ -212,6 +212,17 @@ export function Header({ gameMode, setGameMode }: HeaderProps) {
                 <Ticket className="w-3 h-3" />
                 <span className="hidden sm:inline">Lottery</span>
                 <span className="sm:hidden">Lotto</span>
+              </button>
+              <button
+                onClick={() => setGameMode('leaderboard')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${gameMode === 'leaderboard'
+                  ? 'bg-white dark:bg-zinc-800 shadow-sm text-gray-900 dark:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+              >
+                <Trophy className="w-3 h-3" />
+                <span className="hidden sm:inline">Leaderboard</span>
+                <span className="sm:hidden">Leaders</span>
               </button>
             </div>
           </div>
