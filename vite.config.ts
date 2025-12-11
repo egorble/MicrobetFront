@@ -38,7 +38,7 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    exclude: ['@linera/client', '@linera/signer']
+    exclude: ['@linera/client', '@linera/metamask']
   },
   define: {
     global: 'globalThis',

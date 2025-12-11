@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Bot, Sparkles, X, Send, User, ChevronDown, Minimize2 } from "lucide-react";
+import { Bot, Sparkles, X, Send, ChevronDown, Minimize2 } from "lucide-react";
 import axios from "axios";
 import { Button } from "./ui/button";
 

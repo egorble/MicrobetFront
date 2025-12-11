@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import * as linera from '@linera/client';
-import { MetaMask } from '@linera/signer';
+import { Signer as MetamaskSigner } from '@linera/metamask';
 import { WebSocketClient } from '../utils/WebSocketClient';
 import { parseTimestamp } from '../utils/timeUtils';
 import PocketBase from 'pocketbase'
@@ -519,7 +519,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const nativeApplicationId = import.meta.env.VITE_NATIVE_APPLICATION_ID || '';
       const microbetApplicationId = import.meta.env.VITE_MICROBET_APPLICATION_ID || '';
       const lotteryApplicationId = import.meta.env.VITE_LOTTERY_APPLICATION_ID || '';
-      let signer: any = new MetaMask();
+      let signer: any = new MetamaskSigner();
       const faucet = new linera.Faucet(faucetUrl);
       const owner = await Promise.resolve(signer.address());
       setState(prev => ({ ...prev, status: 'Creating Wallet' }));

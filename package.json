@@ -19,6 +19,7 @@
     "@dynamic-labs/sdk-react-core": "^4.47.0",
     "@dynamic-labs/wallet-book": "^4.47.0",
     "@linera/client": "^0.15.7",
+    "@linera/metamask": "^0.15.7",
     "@linera/signer": "^0.15.6",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
