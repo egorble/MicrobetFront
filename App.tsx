@@ -5,6 +5,7 @@ import { LineraProvider, useLinera } from "./components/LineraProvider";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { LotterySection } from "./components/LotterySection";
 import { Leaderboard } from "./components/Leaderboard";
+import { AIAssistant } from "./components/AIAssistant";
 import { MobileInstallPrompt } from "./components/MobileInstallPrompt";
 import { MobileOrientationHandler } from "./components/MobileOrientationHandler";
 import { MobileSplashScreen } from "./components/MobileSplashScreen";
@@ -322,6 +323,11 @@ function AppContent() {
                 </div>
               </div>
               <ChartTabs selectedToken={selectedToken} />
+              <AIAssistant
+                selectedToken={selectedToken}
+                currentPrice={tokenPrices[selectedToken]}
+                previousGames={previousGames}
+              />
             </main>
           </>
         ) : gameMode === 'lottery' ? (
