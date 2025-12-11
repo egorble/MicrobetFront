@@ -36,20 +36,21 @@ async function executeQuery(endpoint, query) {
 async function upsertPlayer(item, chainLabel) {
   const owner = String(item.owner || '').trim()
   const chainId = String(item.chainId || '').trim()
+  const chain = String(chainLabel || '').toLowerCase() === 'eth' ? 'eth' : 'btc'
   const data = {
     owner,
     chain_id: chainId,
-    chain: String(chainLabel || '').toLowerCase() === 'eth' ? 'eth' : 'btc',
+    chain,
     wins: Number(item.wins || 0),
     losses: Number(item.losses || 0),
     total_won: Number(item.totalWon || 0),
     total_lost: Number(item.totalLost || 0),
   }
   try {
-    const rec = await pb.collection('leaderboard_players').getFirstListItem(`owner ~ "${owner}" && chain_id ~ "${chainId}"`, { requestKey: `lb-${owner}-${chainId}` })
-    if (rec?.id) { await pb.collection('leaderboard_players').update(rec.id, data); return }
+    const rec = await pb.collection('leaderboard_players').getFirstListItem(`owner = "${owner}" && chain_id = "${chainId}" && chain = "${chain}"`, { requestKey: `lb-${owner}-${chainId}-${chain}` })
+    if (rec?.id) { log('update', chain, owner, chainId); await pb.collection('leaderboard_players').update(rec.id, data); return }
   } catch {}
-  try { await pb.collection('leaderboard_players').create(data) } catch (e) { warn('create error:', e?.message || e) }
+  try { log('create', chain, owner, chainId); await pb.collection('leaderboard_players').create(data) } catch (e) { warn('create error:', e?.message || e) }
 }
 
 async function syncOnce(endpoint, chainLabel) {

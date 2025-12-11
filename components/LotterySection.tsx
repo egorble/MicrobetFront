@@ -40,7 +40,6 @@ export function LotterySection() {
 
             // If the previous round is now COMPLETE, show it for a bit longer
             if (prevRoundLatest && prevRoundLatest.status === 'COMPLETE') {
-                console.log(`[LotterySection] Round ${prev.id} finished. Delaying transition to ${activeRound?.id} by 15s.`);
                 setDelayedRoundId(prev.id);
             }
         }

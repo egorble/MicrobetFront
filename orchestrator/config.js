@@ -76,10 +76,7 @@ module.exports = {
     httpTimeoutMs: 10000
   },
 
-  supabase: {
-    url: process.env.SUPABASE_URL || 'https://oznvztsgrgfcithgnosn.supabase.co',
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
-  },
+  
 
   // Налаштування Binance API
   binance: {

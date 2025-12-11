@@ -44,6 +44,8 @@ function endpointToWsUrl(endpointUrl) {
   return host ? `ws://${host}/ws` : null
 }
 
+ 
+
 async function executeQuery(endpoint, query) {
   const q = compactStr(query)
   log('POST', endpoint, 'query:', q)
@@ -107,6 +109,14 @@ function toIsoSafe(v) {
   }
 }
 
+function toNumSafe(v) {
+  try {
+    if (v === null || v === undefined) return null
+    const n = Number(String(v).trim())
+    return Number.isFinite(n) ? n : null
+  } catch { return null }
+}
+
 async function fetchAllRounds() {
   const data = await executeQuery(LOTTERY_HTTP, ALL_ROUNDS_QUERY)
   const rounds = data?.allRounds || []
@@ -132,7 +142,7 @@ function mapWinner(roundId, w) {
     round_id: Number(roundId),
     ticket_number: String(w.ticketNumber),
     source_chain_id: String(w.sourceChainId || 'unknown'),
-    prize_amount: String(w.prizeAmount),
+    prize_amount: toNumSafe(w.prizeAmount),
   }
 }
 
@@ -163,6 +173,7 @@ async function upsertWinners(roundId) {
       try { await pb.collection('lottery_winners').update(existing.id, data); updated += 1 } catch (e) { try { error('lottery_winners update error', e?.message || e) } catch {} }
     } else {
       try { await pb.collection('lottery_winners').create(data); created += 1 } catch (e) {
+        try { error('lottery_winners create error', e?.message || e) } catch {}
         try {
           const fallback = await findWinner(data.round_id, data.ticket_number, data.source_chain_id)
           if (fallback && fallback.id) { await pb.collection('lottery_winners').update(fallback.id, data); updated += 1 }
@@ -211,9 +222,9 @@ function mapRound(r) {
   return {
     round_id: Number(r.id),
     status: String(r.status),
-    ticket_price: String(r.ticketPrice),
+    ticket_price: toNumSafe(r.ticketPrice),
     total_tickets_sold: Number(r.totalTicketsSold),
-    prize_pool: String(r.prizePool),
+    prize_pool: toNumSafe(r.prizePool),
     created_at: createdIso,
     closed_at: closedIso,
   }
@@ -236,6 +247,7 @@ async function upsertRounds(rounds) {
       try { await pb.collection('lottery_rounds').update(existing.id, data); updated += 1 } catch (e) { try { error('lottery_rounds update error', e?.message || e) } catch {} }
     } else {
       try { await pb.collection('lottery_rounds').create(data); created += 1 } catch (e) {
+        try { error('lottery_rounds create error', e?.message || e) } catch {}
         try {
           const fallback = await findRound(data.round_id)
           if (fallback && fallback.id) { await pb.collection('lottery_rounds').update(fallback.id, data); updated += 1 }
@@ -245,6 +257,8 @@ async function upsertRounds(rounds) {
   }
   try { log('upsert rounds pb created=' + created + ' updated=' + updated) } catch {}
 }
+
+ 
 
 let syncing = false
 let pending = false

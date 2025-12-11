@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import * as linera from '@linera/client';
 import { MetaMask } from '@linera/signer';
 import { WebSocketClient } from '../utils/WebSocketClient';
-import { supabaseLottery } from '../utils/supabaseClient';
 import { parseTimestamp } from '../utils/timeUtils';
 import PocketBase from 'pocketbase'
 
@@ -130,6 +129,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const webSocketSetupRef = useRef(false); // Для відстеження чи налаштовані WebSocket'и
   const refreshTimerRef = useRef<number | null>(null);
   const lastLotteryFetchRef = useRef<number>(0);
+  const lotteryPollTimerRef = useRef<number | null>(null);
  
 
  
@@ -237,7 +237,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const scheduleRefreshRounds = () => {
     if (refreshTimerRef.current !== null) return;
-    // Дебаунсимо запити до Supabase, щоб уникнути шторму при масових upsert
     refreshTimerRef.current = window.setTimeout(() => {
       refreshRounds?.();
       if (refreshTimerRef.current !== null) {
@@ -312,8 +311,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         requestKey: `rounds-${chain}`
       })
       const list = res?.items || []
-      try { console.log('[PB] getList rounds length=', list.length, 'url=', PB_URL, 'chain=', chain) } catch {}
-      try { console.log('[PB] sample rounds=', JSON.stringify(list.slice(0, 3), null, 2)) } catch {}
       const roundsDesc = list.map((row: any) => ({
         id: Number(row.round_id ?? 0),
         status: (Array.isArray(row.status) ? (row.status[0] ?? 'ACTIVE') : row.status),
@@ -330,13 +327,11 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         downBetsPool: String(row.down_bets_pool ?? '0'),
       })) as Round[]
       const rounds = roundsDesc.slice().sort((a, b) => a.id - b.id)
-      try { console.log('[PB] mapped rounds count=', rounds.length) } catch {}
       return rounds.map((round: Round) => {
         const { upPayout, downPayout } = calculatePayouts(round)
         return { ...round, upPayout, downPayout }
       })
     } catch (e) {
-      try { console.warn('[PB] queryRounds failed:', e) } catch {}
       return []
     }
   }
@@ -351,7 +346,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         btcRounds,
         ethRounds
       }));
-      try { console.log('[PB] state updated: btcRounds=', btcRounds.length, 'ethRounds=', ethRounds.length) } catch {}
     } catch (error) {}
   };
 
@@ -491,13 +485,12 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }
         }
       } catch (e) {
-        console.error("GraphQL Sync Error:", e);
       }
     }
 
     combined.sort((a, b) => Number(b.id) - Number(a.id));
 
-    setState(prev => ({
+  setState(prev => ({
       ...prev,
       lotteryRounds: combined,
       lotteryWinners: mappedWinners
@@ -506,75 +499,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
  
   };
 
-  const applyWinnerInsert = (payload: any) => {
-    try {
-      const w = payload?.new
-      if (!w) return
-      const roundId = Number(w.round_id)
-      const ticketId = String(w.ticket_number)
-      const createdAt = w.created_at ? (toMs(w.created_at) ?? Date.now()) : Date.now()
-      const winnerObj: Winner = {
-        roundId: String(roundId),
-        ticketId,
-        owner: String(w.source_chain_id || 'unknown'),
-        amount: String(w.prize_amount),
-        createdAt
-      }
-
-      setState(prev => {
-        const existing = prev.lotteryWinners || []
-        const unique = new Set<string>()
-        const merged = [winnerObj, ...existing].filter(x => {
-          const key = `${x.roundId}-${x.ticketId}`
-          if (unique.has(key)) return false
-          unique.add(key)
-          return true
-        }).slice(0, 50)
-        const rounds = (prev.lotteryRounds || []).map(r => {
-          if (r.id === String(roundId)) {
-            const rw = [winnerObj, ...(r.winners || [])]
-            return { ...r, winners: rw }
-          }
-          return r
-        })
-        return { ...prev, lotteryWinners: merged, lotteryRounds: rounds }
-      })
-
- 
-    } catch { }
-  }
-
-  const applyRoundUpsert = (payload: any) => {
-    try {
-      const row = payload?.new || payload?.old
-      if (!row) return
-      const createdMs = row.created_at ? (toMs(row.created_at) ?? Date.now()) : Date.now()
-      const endMs = createdMs + 5 * 60 * 1000
-      const statusUpper = String(row.status).toUpperCase() as LotteryStatus
-      const rr: LotteryRound = {
-        id: String(row.id),
-        status: statusUpper,
-        prizePool: String(row.prize_pool),
-        ticketPrice: String(row.ticket_price),
-        endTime: endMs,
-        ticketsSold: Number((row as any).total_tickets_sold ?? 0),
-        winners: []
-      }
-      setState(prev => {
-        const list = [...(prev.lotteryRounds || [])]
-        const idx = list.findIndex(x => x.id === rr.id)
-        if (idx >= 0) {
-          const ex = list[idx]
-          list[idx] = { ...ex, ...rr, winners: ex.winners }
-        } else {
-          list.unshift(rr)
-        }
-        list.sort((a, b) => Number(b.id) - Number(a.id))
-        return { ...prev, lotteryRounds: list }
-      })
-
-    } catch { }
-  }
 
 
   // Функція для зміни активної вкладки
@@ -785,7 +709,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
 
       } catch (err) {
-        console.error('Notification setup error:', err);
         setState(prev => ({
           ...prev,
           subscriptionStatus: `❌ Notification setup failed: ${err instanceof Error ? err.message : 'Unknown error'}`
@@ -806,7 +729,6 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           }));
           // console.log('Main notification callback removed');
         } catch (err) {
-          console.warn('Error removing main notification callback:', err);
         }
       }
     };
@@ -820,7 +742,7 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const setupSubscription = async () => {
       if (isUnmounted) return
       try {
-        await pb.collection('rounds').subscribe('*', () => { try { console.log('[PB] realtime event for rounds') } catch {}; scheduleRefreshRounds() })
+        await pb.collection('rounds').subscribe('*', () => { scheduleRefreshRounds() })
         subscribed = true
       } catch {}
     }
@@ -847,25 +769,26 @@ export const LineraProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Lottery Subscriptions
   useEffect(() => {
     refreshLottery();
-
-    let unsubRounds: any = null
-    let unsubWinners: any = null
     const setup = async () => {
-      try { unsubRounds = await pb.collection('lottery_rounds').subscribe('*', () => { refreshLottery() }) } catch {}
-      try { unsubWinners = await pb.collection('lottery_winners').subscribe('*', () => { refreshLottery() }) } catch {}
+      try { await pb.collection('lottery_rounds').subscribe('*', () => { refreshLottery() }) } catch {}
+      try { await pb.collection('lottery_winners').subscribe('*', () => { refreshLottery() }) } catch {}
     }
     setup()
+
+    if (lotteryPollTimerRef.current === null) {
+      lotteryPollTimerRef.current = window.setInterval(() => { try { refreshLottery() } catch {} }, 5000)
+    }
 
     return () => {
       try { pb.collection('lottery_rounds').unsubscribe('*') } catch {}
       try { pb.collection('lottery_winners').unsubscribe('*') } catch {}
+      if (lotteryPollTimerRef.current !== null) { clearInterval(lotteryPollTimerRef.current); lotteryPollTimerRef.current = null }
     };
-  }, [state.lotteryApplication]);
+  }, []);
 
   // Окремий useEffect для cleanup при unmount компонента
   useEffect(() => {
     return () => {
-      console.log('Component unmounting - cleaning up WebSocket connections...');
       webSocketSetupRef.current = false;
 
       if (btcWebSocketRef.current) {

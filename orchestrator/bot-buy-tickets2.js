@@ -30,6 +30,13 @@ if (!BOT_OWNER) throw new Error('LOTTERY_BOT_OWNER env is required')
 // State
 let lastProcessedRoundId = -1
 const pendingDelayed = new Set()
+const placedRounds = new Set()
+const buyInFlight = new Set()
+let checkInProgress = false
+let lastCheckTs = 0
+const MIN_CHECK_INTERVAL_MS = 2000
+let periodicTimer = null
+const PERIODIC_CHECK_MS = 5000
 
 // Logging
 function now() { return new Date().toISOString() }
@@ -169,10 +176,15 @@ function scheduleDelayed(roundId) {
         log('skip delayed retries, active changed or not found', roundId)
         return
       }
+      if (placedRounds.has(roundId)) { log('skip delayed: already placed', roundId); return }
+      if (buyInFlight.has(roundId)) { log('skip delayed: buy in-flight', roundId); return }
       log('starting delayed retries for round', roundId)
+      buyInFlight.add(roundId)
       const ok = await buyTickets(roundId)
+      buyInFlight.delete(roundId)
       if (ok) {
         log('delayed retries succeeded for round', roundId)
+        placedRounds.add(roundId)
         lastProcessedRoundId = roundId
       } else {
         error('delayed retries failed for round', roundId)
@@ -187,23 +199,33 @@ function scheduleDelayed(roundId) {
 
 // Check and Buy Logic
 async function checkAndBuy() {
-  const activeRound = await getActiveRound()
-  if (!activeRound) {
-    log('no active round to process')
-    return
-  }
-
-  const roundId = Number(activeRound.id)
-  if (roundId > lastProcessedRoundId) {
+  if (checkInProgress) { log('check skipped: in progress'); return }
+  const now = Date.now()
+  if (now - lastCheckTs < MIN_CHECK_INTERVAL_MS) { log('check skipped: throttled'); return }
+  lastCheckTs = now
+  checkInProgress = true
+  try {
+    const activeRound = await getActiveRound()
+    if (!activeRound) { log('no active round to process'); return }
+    const roundId = Number(activeRound.id)
+    if (placedRounds.has(roundId)) { log('already placed for round', roundId); return }
+    if (buyInFlight.has(roundId)) { log('buy already in-flight for round', roundId); return }
+    if (roundId <= lastProcessedRoundId) { log('active round already processed or older', roundId); return }
     log('new active round', roundId, 'lastProcessed=', lastProcessedRoundId)
-    const ok = await buyTickets(roundId)
-    if (ok) {
-      lastProcessedRoundId = roundId
-    } else {
-      scheduleDelayed(roundId)
+    buyInFlight.add(roundId)
+    try {
+      const ok = await buyTickets(roundId)
+      if (ok) {
+        placedRounds.add(roundId)
+        lastProcessedRoundId = roundId
+      } else {
+        scheduleDelayed(roundId)
+      }
+    } finally {
+      buyInFlight.delete(roundId)
     }
-  } else {
-    log('active round already processed or older', roundId)
+  } finally {
+    checkInProgress = false
   }
 }
 
@@ -253,6 +275,9 @@ function connectWs() {
   }
 
   connect()
+  if (!periodicTimer) {
+    periodicTimer = setInterval(() => { try { checkAndBuy() } catch {} }, PERIODIC_CHECK_MS)
+  }
 }
 
 // Start

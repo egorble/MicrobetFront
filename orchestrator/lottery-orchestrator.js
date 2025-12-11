@@ -209,7 +209,7 @@ async function generateWinnersLoop(roundId) {
 }
 
 async function closeLotteryRound() {
-  const mutation = `mutation { closeLotteryRound }`
+  const mutation = `mutation { closeRound }`
   log('closeLotteryRound call')
   const res = await executeMutation(LOTTERY_HTTP, mutation)
   log('closeLotteryRound result keys=' + Object.keys(res || {}).join(','))

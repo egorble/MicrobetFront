@@ -25,5 +25,3 @@ create policy if not exists rounds_select_anon on public.rounds
 for select
 to anon
 using (true);
-
-alter publication supabase_realtime add table public.rounds;

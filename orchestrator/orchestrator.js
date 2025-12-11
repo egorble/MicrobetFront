@@ -23,6 +23,8 @@ if (ROUNDS_APP_ID && ROUNDS_APP_ID.length > 0) {
 }
 const INTERVAL_MS = config.development.fastMode ? config.development.fastModeIntervalMs : config.timing.intervalMs;
 const MUTATION_DELAY_MS = config.timing.mutationDelayMs;
+const RETRY_COUNT = 3;
+const RETRY_DELAY_MS = 5000;
 
 /**
  * Отримує поточну ціну з Binance API
@@ -86,6 +88,40 @@ async function executeMutation(endpoint, mutation) {
   }
 }
 
+function emojiFor(name) {
+  const e = config.logging.useEmojis;
+  if (!e) return `[${name.toUpperCase()}]`;
+  if (name === 'resolveRound') return '📊';
+  if (name === 'closeRound') return '🔒';
+  return '🔧';
+}
+
+async function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+async function tryMutation(endpoint, name, mutation, retries, delayMs, currency) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      console.log(`${emojiFor(name)} ${name} для ${currency} спроба ${i}/${retries}...`);
+      const res = await executeMutation(endpoint, mutation);
+      const val = res.data?.[name] || 'OK';
+      console.log(`${config.logging.useEmojis ? '✅' : '[SUCCESS]'} ${name} для ${currency}:`, val);
+      return { ok: true, res };
+    } catch (e) {
+      console.log(`${config.logging.useEmojis ? '⚠️' : '[WARN]'} ${name} помилка для ${currency}:`, e?.message || e);
+      if (i < retries) { await delay(delayMs) }
+    }
+  }
+  return { ok: false };
+}
+
+async function performWithFallback(endpoint, primaryName, primaryMutation, secondaryName, secondaryMutation, retries, delayMs, currency) {
+  const a = await tryMutation(endpoint, primaryName, primaryMutation, retries, delayMs, currency);
+  if (a.ok) return { which: 'primary', res: a.res };
+  const b = await tryMutation(endpoint, secondaryName, secondaryMutation, retries, delayMs, currency);
+  if (b.ok) return { which: 'secondary', res: b.res };
+  return { which: null };
+}
+
 /**
  * Виконує цикл мутацій для одного ендпоінту
  * @param {string} endpoint - URL ендпоінту
@@ -115,30 +151,23 @@ async function processCurrency(endpoint, currency, symbol) {
       await new Promise(resolve => setTimeout(resolve, MUTATION_DELAY_MS));
     }
 
-    // 1. Виконуємо resolveRound мутацію
     const resolveMutation = `
       mutation {
         resolveRound(resolutionPrice: "${currentPrice}")
       }
     `;
-    
-    console.log(`${emoji ? '📊' : '[RESOLVE]'} Виконуємо resolveRound для ${currency} з ціною ${currentPrice}...`);
-    const resolveResult = await executeMutation(endpoint, resolveMutation);
-    console.log(`${emoji ? '✅' : '[SUCCESS]'} resolveRound для ${currency} виконано:`, resolveResult.data?.resolveRound || 'OK');
 
-    // Затримка між мутаціями
-    await new Promise(resolve => setTimeout(resolve, MUTATION_DELAY_MS));
-
-    // 2. Виконуємо closeRound мутацію
     const closeMutation = `
       mutation {
         closeRound(closingPrice: "${currentPrice}")
       }
     `;
-    
-    console.log(`${emoji ? '🔒' : '[CLOSE]'} Виконуємо closeRound для ${currency} з ціною ${currentPrice}...`);
-    const closeResult = await executeMutation(endpoint, closeMutation);
-    console.log(`${emoji ? '✅' : '[SUCCESS]'} closeRound для ${currency} виконано:`, closeResult.data?.closeRound || 'OK');
+
+    await performWithFallback(endpoint, 'resolveRound', resolveMutation, 'closeRound', closeMutation, RETRY_COUNT, RETRY_DELAY_MS, currency);
+
+    await delay(MUTATION_DELAY_MS);
+
+    await performWithFallback(endpoint, 'closeRound', closeMutation, 'resolveRound', resolveMutation, RETRY_COUNT, RETRY_DELAY_MS, currency);
 
     // 3. Після закриття — відкриваємо новий раунд, якщо потрібен
     const againActive = await getActiveRound(endpoint);
