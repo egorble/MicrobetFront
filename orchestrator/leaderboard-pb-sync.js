@@ -5,7 +5,7 @@ const config = require('./config')
 
 config.loadEnv()
 
-const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090'
+const PB_URL = process.env.POCKETBASE_URL || process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8091'
 const pb = (() => { const c = new PocketBase(PB_URL); try { c.autoCancellation(false) } catch {}; return c })()
 
 const LB_BTC = config.endpoints.LEADERBOARD_BTC

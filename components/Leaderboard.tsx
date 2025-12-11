@@ -16,7 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from "./ui/table";
-const PB_URL: string = ((import.meta.env as any).VITE_POCKETBASE_URL as string) || "http://127.0.0.1:8090";
+const PB_URL: string = ((import.meta.env as any).VITE_POCKETBASE_URL as string) || "http://127.0.0.1:8091";
 const pb: PocketBase = (() => {
   const g = globalThis as any;
   if (g.__pb_client) return g.__pb_client as PocketBase;

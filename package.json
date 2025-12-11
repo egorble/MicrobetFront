@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:lottery": "npm run --prefix orchestrator dev:lottery",
-    "pb:setup": "powershell -ExecutionPolicy Bypass -File scripts/pb-setup-rounds.ps1 -BaseUrl http://127.0.0.1:8090 -AdminEmail admin@example.com -AdminPassword admin123",
+    "pb:setup": "powershell -ExecutionPolicy Bypass -File scripts/pb-setup-rounds.ps1 -BaseUrl http://127.0.0.1:8091 -AdminEmail admin@example.com -AdminPassword admin123",
     "check:oldchain": "powershell -ExecutionPolicy Bypass -File scripts/check-old-chain.ps1",
     "pb:test-rounds": "node orchestrator/pb-rounds-test.js"
   },

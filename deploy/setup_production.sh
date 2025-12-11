@@ -42,7 +42,7 @@ cd "$WORK_DIR"
 # =========================
 echo ">>> Building frontend"
 cd "$WORK_DIR"
-export VITE_POCKETBASE_URL="https://$DOMAIN:8090"
+export VITE_POCKETBASE_URL="https://$DOMAIN/pb"
 npm run build
 
 sudo mkdir -p /var/www/$DOMAIN
@@ -110,32 +110,6 @@ server {
     }
 }
 
-# PocketBase proxy (HTTP) -> local port 8091
-server {
-    listen 8090;
-    server_name microbet-linera.xyz;
-
-    location / {
-        proxy_pass http://127.0.0.1:8091;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        add_header Access-Control-Allow-Origin "*" always;
-        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "*" always;
-
-        if ($request_method = OPTIONS) {
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
-    }
-}
 NGINXEOF"
 
 sudo ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
@@ -209,20 +183,10 @@ server {
         add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
         add_header Cross-Origin-Resource-Policy \"same-origin\" always;
     }
-}
 
-# PocketBase proxy (HTTPS:8090) -> local port 8091
-server {
-    listen 8090 ssl http2;
-    server_name microbet-linera.xyz;
-
-    ssl_certificate /etc/letsencrypt/live/microbet-linera.xyz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/microbet-linera.xyz/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8091;
+    # PocketBase proxy under /pb to local port 8091
+    location /pb/ {
+        proxy_pass http://127.0.0.1:8091/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -235,13 +199,14 @@ server {
         add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
         add_header Access-Control-Allow-Headers "*" always;
 
-        if ($request_method = OPTIONS) {
+        if (\$request_method = OPTIONS) {
             add_header Content-Length 0;
             add_header Content-Type text/plain;
             return 204;
         }
     }
 }
+
 NGINXEOF"
 
 sudo nginx -t
