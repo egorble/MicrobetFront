@@ -36,57 +36,21 @@ cd "$WORK_DIR/orchestrator"
 npm ci
 cd "$WORK_DIR"
 
-# =========================
-# ENVIRONMENT FILES
-# =========================
-sudo mkdir -p /etc/microbet-linera
-
-if [ ! -f "$WORK_DIR/.env.local" ]; then
-  cat > "$WORK_DIR/.env.local" <<EOF
-VITE_SUPABASE_URL=https://krvnqndokmyjbjonqauz.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtydm5xbmRva215amJqb25xYXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyMzA4NzcsImV4cCI6MjA3ODgwNjg3N30.wx6RRWcS65WOhbMVt2yoFLD52KmWfeoN4KpwZy0z954
-VITE_NATIVE_APPLICATION_ID=6f92b9bd2544dcf1bf15145b1a815f25509890cfd37d91bc64d4db66a888b1bf
-VITE_MICROBET_APPLICATION_ID=8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315
-VITE_LINERA_APPLICATION_ID=8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315
-VITE_BTC_CHAIN_ID=8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66
-VITE_ETH_CHAIN_ID=4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7
-VITE_BTC_TARGET_OWNER=0x3e04a519849879bbe6ee71756d2e14beb97ba09e1f5f6c9a6b385a68c9105402
-VITE_ETH_TARGET_OWNER=0xfa7b3b412e1b3dffc915df7ae7b7e59a0ebcbc084d8f71b724f35ec2ad872dc9
-VITE_LOTTERY_APPLICATION_ID=018cda9557b55765846b47f70fe334999275f6bc561994fa6cb8a1fe14e60eb1
-VITE_LOTTERY_CHAIN_ID=5004f32aab0413261b1fb0087ebd5ed650dfba64306466f939aac7dbe846d11e
-VITE_LOTTERY_TARGET_OWNER=0x0ac08e63dc28f0570b2b842e7bd8cfa3b17bd77cb29197f4e6b0b17183919b88
-VITE_SUPABASE_LOTTERY_URL=https://oznvztsgrgfcithgnosn.supabase.co
-VITE_SUPABASE_LOTTERY_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bnZ6dHNncmdmY2l0aGdub3NuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4Mjc3NzMsImV4cCI6MjA3OTQwMzc3M30.buN7DsUZzT8KAG2dssBnkfx3Ftnzf8ouONUtcIdp-S4
-VITE_BTC_ENDPOINT=http://localhost:8082/chains/8034b1b376dd64d049deec9bb3a74378502e9b2a6b1b370c5d1a510534e93b66/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315
-VITE_ETH_ENDPOINT=http://localhost:8083/chains/4c5aee235b9d9ddf62f05d377fd832c718cb5939fc3545ba5ee2829b4c99dfb7/applications/8ab4300969fde975fa8bc0ee25f5c8e34d13ca141fd1d40616721641176aa315
-EOF
-fi
-
-if [ ! -f "/etc/microbet-linera/supabase.env" ]; then
-  sudo bash -c "cat > /etc/microbet-linera/supabase.env <<EOF
-SUPABASE_URL=https://krvnqndokmyjbjonqauz.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtydm5xbmRva215amJqb25xYXV6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzIzMDg3NywiZXhwIjoyMDc4ODA2ODc3fQ.ln4Zlz8bcF6nwc0Viii4aauG0Y-h7dET7VeHZgtTbYc
-SUPABASE_DB_URL=
-EOF"
-fi
-
-if [ ! -f "/etc/microbet-linera/supabase-lottery.env" ]; then
-  sudo bash -c "cat > /etc/microbet-linera/supabase-lottery.env <<EOF
-SUPABASE_URL_LOTTERY=https://oznvztsgrgfcithgnosn.supabase.co
-SUPABASE_SERVICE_ROLE_KEY_LOTTERY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96bnZ6dHNncmdmY2l0aGdub3NuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzgyNzc3MywiZXhwIjoyMDc5NDAzNzczfQ.8ge0Whdgm9C2Lnoj8w85fAtEc961IGL2XOWtrXWdOD8
-EOF"
-fi
 
 # =========================
 # BUILD FRONTEND
 # =========================
 echo ">>> Building frontend"
 cd "$WORK_DIR"
+export VITE_POCKETBASE_URL="https://$DOMAIN:8090"
 npm run build
 
 sudo mkdir -p /var/www/$DOMAIN
 sudo rm -rf /var/www/$DOMAIN/*
 sudo cp -r "$WORK_DIR/dist/"* /var/www/$DOMAIN/
+
+cd "$WORK_DIR/orchestrator"
+node rounds-init.js
 
 # =========================
 # NGINX CONFIG
@@ -145,6 +109,33 @@ server {
         add_header Cross-Origin-Resource-Policy \"same-origin\" always;
     }
 }
+
+# PocketBase proxy (HTTP) -> local port 8089
+server {
+    listen 8090;
+    server_name microbet-linera.xyz;
+
+    location / {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "*" always;
+
+        if ($request_method = OPTIONS) {
+            add_header Content-Length 0;
+            add_header Content-Type text/plain;
+            return 204;
+        }
+    }
+}
 NGINXEOF"
 
 sudo ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
@@ -161,7 +152,7 @@ sudo bash -c "cat > /etc/nginx/sites-available/$DOMAIN <<'NGINXEOF'
 server {
     listen 80;
     server_name microbet-linera.xyz;
-    return 301 https://\$server_name\$request_uri;
+    return 301 https://$server_name$request_uri;
 }
 
 server {
@@ -219,6 +210,38 @@ server {
         add_header Cross-Origin-Resource-Policy \"same-origin\" always;
     }
 }
+
+# PocketBase proxy (HTTPS:8090) -> local port 8089
+server {
+    listen 8090 ssl http2;
+    server_name microbet-linera.xyz;
+
+    ssl_certificate /etc/letsencrypt/live/microbet-linera.xyz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/microbet-linera.xyz/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "*" always;
+
+        if ($request_method = OPTIONS) {
+            add_header Content-Length 0;
+            add_header Content-Type text/plain;
+            return 204;
+        }
+    }
+}
 NGINXEOF"
 
 sudo nginx -t
@@ -266,7 +289,7 @@ WantedBy=multi-user.target
 EOF"
 
 # Supabase Sync
-sudo bash -c "cat > /etc/systemd/system/microbet-sync.service <<EOF
+  sudo bash -c "cat > /etc/systemd/system/microbet-sync.service <<EOF
 [Unit]
 Description=Microbet Supabase Sync Daemon
 After=network.target
@@ -275,7 +298,6 @@ After=network.target
 Type=simple
 WorkingDirectory=$WORK_DIR/orchestrator
 ExecStart=/usr/bin/node supabase-sync.js
-EnvironmentFile=/etc/microbet-linera/supabase.env
 Restart=always
 RestartSec=5
 User=$RUN_USER
@@ -286,7 +308,7 @@ WantedBy=multi-user.target
 EOF"
 
 # Lottery Sync
-sudo bash -c "cat > /etc/systemd/system/microbet-lottery-sync.service <<EOF
+  sudo bash -c "cat > /etc/systemd/system/microbet-lottery-sync.service <<EOF
 [Unit]
 Description=Microbet Lottery Sync Daemon
 After=network.target
@@ -295,7 +317,44 @@ After=network.target
 Type=simple
 WorkingDirectory=$WORK_DIR/orchestrator
 ExecStart=/usr/bin/node lottery-supabase-sync.js
-EnvironmentFile=/etc/microbet-linera/supabase-lottery.env
+Restart=always
+RestartSec=5
+User=$RUN_USER
+Group=$RUN_USER
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+# Leaderboard PocketBase Sync
+sudo bash -c "cat > /etc/systemd/system/microbet-leaderboard-sync.service <<EOF
+[Unit]
+Description=Microbet Leaderboard PocketBase Sync
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$WORK_DIR/orchestrator
+ExecStart=/usr/bin/node leaderboard-pb-sync.js
+Restart=always
+RestartSec=5
+User=$RUN_USER
+Group=$RUN_USER
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+# Lottery Bot tickets purchaser
+sudo bash -c "cat > /etc/systemd/system/microbet-lottery-bot.service <<EOF
+[Unit]
+Description=Microbet Lottery Bot Buyer
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$WORK_DIR/orchestrator
+ExecStart=/usr/bin/node bot-buy-tickets2.js
 Restart=always
 RestartSec=5
 User=$RUN_USER
@@ -306,7 +365,7 @@ WantedBy=multi-user.target
 EOF"
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now microbet-orchestrator.service microbet-sync.service microbet-lottery-orchestrator.service microbet-lottery-sync.service
+sudo systemctl enable --now microbet-orchestrator.service microbet-sync.service microbet-lottery-orchestrator.service microbet-lottery-sync.service microbet-leaderboard-sync.service microbet-lottery-bot.service
 
 echo "====================================="
 echo " Deployment completed successfully!  "
