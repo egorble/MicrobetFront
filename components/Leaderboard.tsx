@@ -35,6 +35,8 @@ interface LeaderRow {
   _wins?: number;
   _losses?: number;
   _totalWonNum?: number;
+  _totalLostNum?: number;
+  _netNum?: number;
 }
 
 export function Leaderboard() {
@@ -56,6 +58,8 @@ export function Leaderboard() {
           const total = wins + losses;
           const rate = total > 0 ? Math.round((wins / total) * 10000) / 100 : 0;
           const totalWon = Number(r.total_won || 0);
+          const totalLost = Number(r.total_lost || 0);
+          const net = totalWon - totalLost;
           return {
             rank: idx + 1,
             user: String(r.owner || ""),
@@ -65,6 +69,8 @@ export function Leaderboard() {
             _wins: wins,
             _losses: losses,
             _totalWonNum: totalWon,
+            _totalLostNum: totalLost,
+            _netNum: net,
           };
         });
         setLeaders(mapped);
@@ -187,7 +193,9 @@ export function Leaderboard() {
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Net Winnings</span>
-                                <span className="font-bold text-green-600 dark:text-green-500">+{topThree[1].totalWon}</span>
+                                <span className={`font-bold ${(topThree[1]._netNum || 0) < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                                  {(topThree[1]._netNum || 0) < 0 ? '-' : '+'}{Math.abs(topThree[1]._netNum || 0).toLocaleString()}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Rounds Won</span>
@@ -229,7 +237,9 @@ export function Leaderboard() {
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Net Winnings</span>
-                                <span className="font-black text-green-600 dark:text-green-500 text-lg">+{topThree[0].totalWon}</span>
+                                <span className={`font-black ${(topThree[0]._netNum || 0) < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'} text-lg`}>
+                                  {(topThree[0]._netNum || 0) < 0 ? '-' : '+'}{Math.abs(topThree[0]._netNum || 0).toLocaleString()}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Rounds Won</span>
@@ -267,7 +277,9 @@ export function Leaderboard() {
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Net Winnings</span>
-                                <span className="font-bold text-green-600 dark:text-green-500">+{topThree[2].totalWon}</span>
+                                <span className={`font-bold ${(topThree[2]._netNum || 0) < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                                  {(topThree[2]._netNum || 0) < 0 ? '-' : '+'}{Math.abs(topThree[2]._netNum || 0).toLocaleString()}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-gray-500 dark:text-gray-400 font-medium">Rounds Won</span>
@@ -291,7 +303,7 @@ export function Leaderboard() {
                         <TableRow className="hover:bg-transparent border-gray-200 dark:border-zinc-800">
                             <TableHead className="w-[100px] pl-8 h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Rank</TableHead>
                             <TableHead className="h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">User</TableHead>
-                            <TableHead className="text-right h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total Won</TableHead>
+                            <TableHead className="text-right h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Net Winnings</TableHead>
                             <TableHead className="text-right h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Win Rate</TableHead>
                             <TableHead className="text-right pr-8 h-12 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Rounds Played</TableHead>
                         </TableRow>
@@ -307,8 +319,8 @@ export function Leaderboard() {
                                 <TableCell className="font-mono text-sm text-gray-600 dark:text-gray-300 font-bold group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
                                     {leader.user}
                                 </TableCell>
-                                <TableCell className="text-right font-black text-green-600 dark:text-green-500">
-                                    +{leader.totalWon}
+                                <TableCell className={`text-right font-black ${(leader._netNum || 0) < 0 ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`}>
+                                    {(leader._netNum || 0) < 0 ? '-' : '+'}{Math.abs(leader._netNum || 0).toLocaleString()}
                                 </TableCell>
                                 <TableCell className="text-right text-gray-600 dark:text-gray-400 font-medium">
                                     {leader.winRate}

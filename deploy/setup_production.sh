@@ -49,68 +49,11 @@ sudo mkdir -p /var/www/$DOMAIN
 sudo rm -rf /var/www/$DOMAIN/*
 sudo cp -r "$WORK_DIR/dist/"* /var/www/$DOMAIN/
 
-cd "$WORK_DIR/orchestrator"
-node rounds-init.js
-
 # =========================
 # NGINX CONFIG
 # =========================
-sudo bash -c "cat > /etc/nginx/sites-available/$DOMAIN <<'NGINXEOF'
-server {
-    listen 80;
-    server_name microbet-linera.xyz;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    root /var/www/microbet-linera.xyz;
-    index index.html;
-
-    add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-    add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-    add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-
-    # Assets (JS/CSS/WASM) with CORS for Web Workers
-    location /assets/ {
-        root /var/www/microbet-linera.xyz;
-        add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-        add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-        add_header Access-Control-Allow-Origin \"*\" always;
-        add_header Access-Control-Allow-Methods \"GET, HEAD, OPTIONS\" always;
-        add_header Cache-Control \"public, max-age=31536000, immutable\";
-
-        if (\$request_method = OPTIONS) {
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
-    }
-
-    # Static files
-    location / {
-        try_files \$uri /index.html;
-    }
-
-    # Orchestrator WebSocket proxy
-    location /ws {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \"upgrade\";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-        add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-    }
-}
-
-NGINXEOF"
+sudo cp "$WORK_DIR/deploy/nginx-site-template.conf" "/etc/nginx/sites-available/$DOMAIN"
+sudo sed -i "s|__DOMAIN__|$DOMAIN|g" "/etc/nginx/sites-available/$DOMAIN"
 
 sudo ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 sudo nginx -t
@@ -122,92 +65,8 @@ sudo systemctl reload nginx
 sudo certbot --nginx -n --agree-tos -m "$EMAIL" -d "$DOMAIN" --redirect
 
 # Fix SSL config to preserve all headers
-sudo bash -c "cat > /etc/nginx/sites-available/$DOMAIN <<'NGINXEOF'
-server {
-    listen 80;
-    server_name microbet-linera.xyz;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name microbet-linera.xyz;
-
-    ssl_certificate /etc/letsencrypt/live/microbet-linera.xyz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/microbet-linera.xyz/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    root /var/www/microbet-linera.xyz;
-    index index.html;
-
-    # Critical headers for SharedArrayBuffer (WASM threads)
-    add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-    add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-    add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-
-    # Assets (JS/CSS/WASM) with CORS for Web Workers
-    location /assets/ {
-        root /var/www/microbet-linera.xyz;
-        add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-        add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-        add_header Access-Control-Allow-Origin \"*\" always;
-        add_header Access-Control-Allow-Methods \"GET, HEAD, OPTIONS\" always;
-        add_header Cache-Control \"public, max-age=31536000, immutable\";
-
-        if (\$request_method = OPTIONS) {
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
-    }
-
-    # Static files
-    location / {
-        try_files \$uri /index.html;
-    }
-
-    # Orchestrator WebSocket proxy
-    location /ws {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection \"upgrade\";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        add_header Cross-Origin-Opener-Policy \"same-origin\" always;
-        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;
-        add_header Cross-Origin-Resource-Policy \"same-origin\" always;
-    }
-
-    # PocketBase proxy under /pb to local port 8091
-    location /pb/ {
-        proxy_pass http://127.0.0.1:8091/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-
-        add_header Access-Control-Allow-Origin "*" always;
-        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "*" always;
-
-        if (\$request_method = OPTIONS) {
-            add_header Content-Length 0;
-            add_header Content-Type text/plain;
-            return 204;
-        }
-    }
-}
-
-NGINXEOF"
+sudo cp "$WORK_DIR/deploy/nginx-site-template.conf" "/etc/nginx/sites-available/$DOMAIN"
+sudo sed -i "s|__DOMAIN__|$DOMAIN|g" "/etc/nginx/sites-available/$DOMAIN"
 
 sudo nginx -t
 sudo systemctl reload nginx

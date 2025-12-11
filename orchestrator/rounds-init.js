@@ -8,12 +8,20 @@ function log() { const args = Array.from(arguments); console.log(`[${now()}] [ro
 function warn() { const args = Array.from(arguments); console.warn(`[${now()}] [rounds-init]`, ...args) }
 function error() { const args = Array.from(arguments); console.error(`[${now()}] [rounds-init]`, ...args) }
 function compactStr(v) { return String(v).replace(/\s+/g, ' ').trim() }
+function trunc(s, n = 1000) { try { const t = typeof s === 'string' ? s : JSON.stringify(s); return t.length > n ? t.slice(0, n) + '…' : t } catch { try { const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t } catch { return '' } } }
 
 async function postMutation(endpoint, query) {
   const q = compactStr(query)
+  log('POST', endpoint, 'query:', q)
   const res = await axios.post(endpoint, { query }, { headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, timeout: 15000, validateStatus: () => true })
-  if (res?.data?.errors) throw new Error(JSON.stringify(res.data.errors))
-  return res?.data?.data
+  log('HTTP', res.status, res.statusText)
+  const raw = res?.data
+  if (raw?.errors) { error('GraphQL errors:', trunc(raw.errors)); throw new Error(JSON.stringify(raw.errors)) }
+  const data = raw?.data
+  const keys = Object.keys(data || {})
+  log('RESPONSE keys=' + keys.join(','), 'size=' + (JSON.stringify(raw || {}).length))
+  log('RESPONSE preview=', trunc(raw))
+  return data
 }
 
 async function runMutation(endpoint, label, name, query) {
